@@ -1,0 +1,6 @@
+export { useAnalysisStore } from './analysis'
+export { useMapStore } from './map'
+export { useUIStore } from './ui'
+export { useClientesStore } from './clientes'
+export { useProyectosStore } from './proyectos'
+export { useCorpusStore } from './corpus'

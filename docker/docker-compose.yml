@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+  db:
+    build:
+      context: ./postgis
+      dockerfile: Dockerfile
+    container_name: mineria_postgis
+    environment:
+      POSTGRES_DB: mineria
+      POSTGRES_USER: mineria
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mineria_dev_2024}
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      - ./postgis/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mineria -d mineria"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mineria_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: mineria_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mineria_network
+
+  geoserver:
+    image: kartoza/geoserver:2.24.0
+    container_name: mineria_geoserver
+    environment:
+      GEOSERVER_ADMIN_USER: admin
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_PASSWORD:-geoserver_dev_2024}
+      GEOSERVER_DATA_DIR: /opt/geoserver/data_dir
+      PROXY_BASE_URL: ${GEOSERVER_PROXY_BASE_URL:-http://localhost:9085/geoserver}
+    volumes:
+      - geoserver_data:/opt/geoserver/data_dir
+    ports:
+      - "9085:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - mineria_network
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: mineria_backend
+    environment:
+      DATABASE_URL: postgresql://mineria:${POSTGRES_PASSWORD:-mineria_dev_2024}@db:5432/mineria
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Timeout aumentado para análisis LLM (5 minutos)
+      UVICORN_TIMEOUT_KEEP_ALIVE: 300
+    volumes:
+      - ../backend:/app
+      - ../data:/app/data
+    ports:
+      - "9001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Desarrollo: --reload (hot-reload, 1 worker)
+    # Producción: usar docker-compose.prod.yml con gunicorn + workers
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-keep-alive 300
+    networks:
+      - mineria_network
+
+  # Backend para producción (usar con: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up)
+  backend-prod:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: mineria_backend_prod
+    profiles:
+      - production
+    environment:
+      DATABASE_URL: postgresql://mineria:${POSTGRES_PASSWORD:-mineria_dev_2024}@db:5432/mineria
+      REDIS_URL: redis://redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY}
+      ENVIRONMENT: production
+    volumes:
+      - ../data:/app/data
+    ports:
+      - "9001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Producción: 4 workers con gunicorn
+    command: gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300
+    networks:
+      - mineria_network
+
+volumes:
+  postgis_data:
+  redis_data:
+  geoserver_data:
+
+networks:
+  mineria_network:
+    driver: bridge

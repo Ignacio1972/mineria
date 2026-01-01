@@ -1,0 +1,196 @@
+{
+  "version": "1.0.0",
+  "proyecto": "Sistema de Prefactibilidad Ambiental Minera",
+  "descripcion": "Catálogo de capas GIS para análisis ambiental de proyectos mineros en Chile",
+  "sistema_referencia": "EPSG:4326 (WGS84)",
+  "actualizado": "2024-12-26",
+  "capas": [
+    {
+      "id": "areas_protegidas",
+      "nombre": "Áreas Protegidas",
+      "descripcion": "SNASPE, Santuarios de la Naturaleza, Reservas",
+      "tabla_bd": "gis.areas_protegidas",
+      "tipo_geometria": "MultiPolygon",
+      "buffer_analisis_m": 50000,
+      "relevancia_seia": "Art. 11 letra d) - Áreas protegidas",
+      "fuentes_recomendadas": ["CONAF", "MMA", "IDE Chile"],
+      "archivos": [
+        {
+          "archivo": "snaspe_arcgis_nacional_2024.geojson",
+          "fuente": "ArcGIS REST Services",
+          "fecha_descarga": "2024-12-26",
+          "registros": 2754,
+          "cargado_bd": true
+        },
+        {
+          "archivo": "Areas Protegidas.shp",
+          "fuente": "MMA - Líneas de Base Públicas",
+          "fecha_descarga": "2024-12-26",
+          "registros": 583,
+          "cargado_bd": true
+        },
+        {
+          "archivo": "Sitios Prioritarios según Ley 19300.shp",
+          "fuente": "MMA - Líneas de Base Públicas",
+          "fecha_descarga": "2024-12-26",
+          "registros": 63,
+          "cargado_bd": true
+        }
+      ]
+    },
+    {
+      "id": "glaciares",
+      "nombre": "Glaciares",
+      "descripcion": "Inventario de glaciares y ambiente periglaciar",
+      "tabla_bd": "gis.glaciares",
+      "tipo_geometria": "MultiPolygon",
+      "buffer_analisis_m": 20000,
+      "relevancia_seia": "Art. 11 letra b) - Recursos naturales",
+      "fuentes_recomendadas": ["DGA"],
+      "archivos": [
+        {
+          "archivo": "Inventario de Glaciares.shp",
+          "fuente": "DGA via MMA - Líneas de Base",
+          "fecha_descarga": "2024-12-26",
+          "registros": 450,
+          "cobertura": "Región Antofagasta",
+          "cargado_bd": true
+        }
+      ]
+    },
+    {
+      "id": "cuerpos_agua",
+      "nombre": "Cuerpos de Agua",
+      "descripcion": "Ríos, lagos, humedales, sitios Ramsar",
+      "tabla_bd": "gis.cuerpos_agua",
+      "tipo_geometria": "Geometry",
+      "buffer_analisis_m": 10000,
+      "relevancia_seia": "Art. 11 letra b) - Recursos naturales renovables",
+      "fuentes_recomendadas": ["DGA", "MMA", "IDE Chile"],
+      "archivos": [
+        {
+          "archivo": "Inventario de Humedales.shp",
+          "fuente": "MMA - Inventario Nacional Humedales",
+          "fecha_descarga": "2024-12-26",
+          "registros": 1722,
+          "cobertura": "Región Antofagasta",
+          "cargado_bd": true
+        }
+      ]
+    },
+    {
+      "id": "comunidades_indigenas",
+      "nombre": "Comunidades Indígenas",
+      "descripcion": "Comunidades y Áreas de Desarrollo Indígena",
+      "tabla_bd": "gis.comunidades_indigenas",
+      "tipo_geometria": "Geometry",
+      "buffer_analisis_m": 30000,
+      "relevancia_seia": "Art. 11 letras c) y d) - Comunidades humanas",
+      "fuentes_recomendadas": ["CONADI"],
+      "archivos": []
+    },
+    {
+      "id": "centros_poblados",
+      "nombre": "Centros Poblados",
+      "descripcion": "Ciudades, pueblos, aldeas",
+      "tabla_bd": "gis.centros_poblados",
+      "tipo_geometria": "Point",
+      "buffer_analisis_m": 20000,
+      "relevancia_seia": "Art. 11 letra a) - Riesgo para la salud",
+      "fuentes_recomendadas": ["INE", "IDE Chile"],
+      "archivos": []
+    },
+    {
+      "id": "sitios_patrimoniales",
+      "nombre": "Sitios Patrimoniales",
+      "descripcion": "Patrimonio arqueológico, histórico y cultural",
+      "tabla_bd": "gis.sitios_patrimoniales",
+      "tipo_geometria": "Geometry",
+      "buffer_analisis_m": 10000,
+      "relevancia_seia": "Art. 11 letra e) - Patrimonio cultural",
+      "fuentes_recomendadas": ["CMN", "UNESCO"],
+      "archivos": []
+    },
+    {
+      "id": "regiones",
+      "nombre": "Regiones",
+      "descripcion": "División político-administrativa regional",
+      "tabla_bd": "gis.regiones",
+      "tipo_geometria": "MultiPolygon",
+      "buffer_analisis_m": null,
+      "relevancia_seia": "Ubicación administrativa",
+      "fuentes_recomendadas": ["IDE Chile", "BCN"],
+      "archivos": []
+    },
+    {
+      "id": "comunas",
+      "nombre": "Comunas",
+      "descripcion": "División político-administrativa comunal",
+      "tabla_bd": "gis.comunas",
+      "tipo_geometria": "MultiPolygon",
+      "buffer_analisis_m": null,
+      "relevancia_seia": "Ubicación administrativa",
+      "fuentes_recomendadas": ["IDE Chile", "BCN"],
+      "archivos": []
+    },
+    {
+      "id": "bienes_nacionales_protegidos",
+      "nombre": "Bienes Nacionales Protegidos",
+      "descripcion": "Terrenos fiscales con protección ambiental",
+      "tabla_bd": "gis.bienes_nacionales_protegidos",
+      "tipo_geometria": "Polygon",
+      "buffer_analisis_m": 10000,
+      "relevancia_seia": "Art. 11 letra d) - Áreas protegidas",
+      "fuentes_recomendadas": ["Bienes Nacionales"],
+      "archivos": []
+    }
+  ],
+  "fuentes": {
+    "ide_chile": {
+      "nombre": "Infraestructura de Datos Geoespaciales de Chile",
+      "url": "https://www.ide.cl/",
+      "descripcion": "Portal oficial de datos geoespaciales del Estado"
+    },
+    "conaf": {
+      "nombre": "Corporación Nacional Forestal",
+      "url": "https://www.conaf.cl/",
+      "descripcion": "SNASPE, áreas protegidas terrestres"
+    },
+    "dga": {
+      "nombre": "Dirección General de Aguas",
+      "url": "https://dga.mop.gob.cl/",
+      "descripcion": "Recursos hídricos, glaciares, cuencas"
+    },
+    "conadi": {
+      "nombre": "Corporación Nacional de Desarrollo Indígena",
+      "url": "https://www.conadi.gob.cl/",
+      "descripcion": "Comunidades indígenas, ADIs"
+    },
+    "cmn": {
+      "nombre": "Consejo de Monumentos Nacionales",
+      "url": "https://www.monumentos.gob.cl/",
+      "descripcion": "Patrimonio cultural, arqueológico e histórico"
+    },
+    "ine": {
+      "nombre": "Instituto Nacional de Estadísticas",
+      "url": "https://www.ine.cl/",
+      "descripcion": "Censo, entidades pobladas"
+    },
+    "mma": {
+      "nombre": "Ministerio del Medio Ambiente",
+      "url": "https://mma.gob.cl/",
+      "descripcion": "Biodiversidad, sitios Ramsar, humedales"
+    },
+    "bcn": {
+      "nombre": "Biblioteca del Congreso Nacional",
+      "url": "https://www.bcn.cl/siit/mapas_vectoriales",
+      "descripcion": "División político-administrativa oficial"
+    }
+  },
+  "estadisticas": {
+    "total_capas": 9,
+    "capas_con_datos": 3,
+    "registros_totales": 5572,
+    "ultima_carga": "2024-12-26"
+  }
+}

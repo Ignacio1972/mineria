@@ -1,0 +1,78 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: corporate --default, dark --prefersdark;
+}
+
+/* Estilos base para el mapa */
+.map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.ol-control {
+  @apply bg-base-100 rounded-lg shadow-lg;
+}
+
+.ol-control button {
+  @apply bg-primary text-primary-content hover:brightness-90;
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-base-200;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-base-300 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-base-content/30;
+}
+
+/* Estilos para el layout principal */
+.app-layout {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: auto 1fr;
+  min-height: 100vh;
+}
+
+.app-header {
+  grid-column: 1 / -1;
+}
+
+.app-sidebar {
+  grid-row: 2;
+  grid-column: 1;
+  overflow-y: auto;
+}
+
+.app-main {
+  grid-row: 2;
+  grid-column: 2;
+  min-height: 0;
+}
+
+.app-footer {
+  grid-column: 1 / -1;
+}
+
+/* Panel colapsable de resultados */
+.results-panel {
+  transition: max-height 0.3s ease-in-out;
+}
+
+.results-panel.collapsed {
+  max-height: 48px;
+  overflow: hidden;
+}
+
+.results-panel.expanded {
+  max-height: 50vh;
+}
