@@ -28,6 +28,10 @@ export interface FuenteCitada {
   referencia?: string
   fragmento?: string
   confianza?: number
+  // Campos para acceso al documento original
+  documento_id?: number
+  url_documento?: string  // URL para ver el documento en el visor
+  url_descarga?: string   // URL para descargar el PDF directamente
 }
 
 // Mensajes

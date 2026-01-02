@@ -163,19 +163,21 @@ function formatearTokens(tokens?: number): string {
             <div
               v-for="(norma, idx) in auditoria.normativa_citada"
               :key="idx"
-              class="flex items-start gap-2 p-2 bg-base-100 rounded-lg"
+              class="p-3 bg-base-100 rounded-lg"
             >
-              <span class="badge badge-primary badge-sm shrink-0">
-                {{ norma.tipo }} {{ norma.numero }}
-              </span>
-              <div class="flex-1 min-w-0">
-                <div class="text-sm">
-                  <span v-if="norma.articulo">Art. {{ norma.articulo }}</span>
-                  <span v-if="norma.letra" class="ml-1">letra {{ norma.letra }})</span>
-                </div>
-                <div v-if="norma.descripcion" class="text-xs opacity-70 truncate">
-                  {{ norma.descripcion }}
-                </div>
+              <!-- Título de la norma -->
+              <div class="flex flex-wrap items-center gap-2 mb-1">
+                <span class="badge badge-primary text-xs whitespace-normal text-left h-auto py-1">
+                  {{ norma.tipo }} {{ norma.numero }}
+                </span>
+                <span v-if="norma.articulo" class="text-sm font-medium">
+                  Art. {{ norma.articulo }}
+                  <span v-if="norma.letra">letra {{ norma.letra }})</span>
+                </span>
+              </div>
+              <!-- Descripción -->
+              <div v-if="norma.descripcion" class="text-xs opacity-70 mt-1">
+                {{ norma.descripcion }}
               </div>
             </div>
           </div>

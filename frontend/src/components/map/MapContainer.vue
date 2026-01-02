@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
 import { useMapStore } from '@/stores/map';
 import type { GeometriaGeoJSON } from '@/types';
 import MapControls from './MapControls.vue';
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 const GEOSERVER_URL = import.meta.env.VITE_GEOSERVER_URL || 'http://localhost:9085/geoserver';
 
 const mapStore = useMapStore();
+const { herramientaDibujo } = storeToRefs(mapStore);
 
 const mapRef = ref<HTMLDivElement | null>(null);
 const tooltipRef = ref<HTMLDivElement | null>(null);
@@ -27,6 +29,10 @@ const projectLayer = ref<any>(null);
 const wmsLayers = ref<Map<string, any>>(new Map());
 const tooltipOverlay = ref<any>(null);
 const tooltipContent = ref<string>('');
+
+// Flag para evitar feedback loop entre OpenLayers y Pinia
+// Se usa para ignorar eventos del mapa durante animaciones programáticas
+let isProgrammaticMove = false;
 
 onMounted(async () => {
   if (!mapRef.value) return;
@@ -76,6 +82,7 @@ onMounted(async () => {
       center: fromLonLat(mapStore.centro),
       zoom: mapStore.zoom,
     }),
+    controls: [], // Desactivar controles predeterminados (usamos nuestros propios MapControls y DrawTools)
   });
 
   // Crear tooltip overlay
@@ -161,24 +168,29 @@ onMounted(async () => {
   // Cargar capas desde la API
   mapStore.cargarCapasDesdeAPI();
 
-  // Sync view changes
-  olMap.value.getView().on('change:center', () => {
-    const center = olMap.value.getView().getCenter();
+  // Sincronizar vista del mapa al store solo cuando el mapa termina de moverse
+  // Usamos 'moveend' en lugar de 'change:center' para evitar actualizaciones durante animaciones
+  olMap.value.on('moveend', () => {
+    if (isProgrammaticMove) return; // Ignorar si fue un movimiento programático
+
+    const view = olMap.value.getView();
+    const center = view.getCenter();
+    const currentZoom = view.getZoom();
+
     if (center) {
       const lonLat = toLonLat(center);
       if (lonLat[0] !== undefined && lonLat[1] !== undefined) {
         mapStore.setCentro([lonLat[0], lonLat[1]]);
       }
     }
-  });
-
-  olMap.value.getView().on('change:resolution', () => {
-    mapStore.setZoom(Math.round(olMap.value.getView().getZoom() || 6));
+    if (currentZoom !== undefined) {
+      mapStore.setZoom(Math.round(currentZoom));
+    }
   });
 
   // Watch for draw mode changes
   watch(
-    () => mapStore.herramientaDibujo,
+    herramientaDibujo,
     (herramienta) => {
       if (drawInteraction.value) {
         olMap.value.removeInteraction(drawInteraction.value);
@@ -270,23 +282,46 @@ onMounted(async () => {
     { immediate: true }
   );
 
-  // Watch for zoom changes
+  // Watch for zoom changes desde el store (ej: botones de zoom)
   watch(
     () => mapStore.zoom,
     (newZoom) => {
       const currentZoom = olMap.value.getView().getZoom();
       if (Math.abs((currentZoom || 0) - newZoom) > 0.5) {
-        olMap.value.getView().animate({ zoom: newZoom, duration: 250 });
+        isProgrammaticMove = true;
+        olMap.value.getView().animate({
+          zoom: newZoom,
+          duration: 250
+        }, () => {
+          // Callback cuando termina la animación
+          isProgrammaticMove = false;
+        });
       }
     }
   );
 
-  // Watch for center changes
+  // Watch for center changes desde el store (ej: centrarEnRegion)
   watch(
     () => mapStore.centro,
     (newCenter) => {
-      const center = fromLonLat(newCenter);
-      olMap.value.getView().animate({ center, duration: 250 });
+      const currentCenter = olMap.value.getView().getCenter();
+      const targetCenter = fromLonLat(newCenter);
+
+      // Solo animar si el cambio es significativo (más de 1000 metros)
+      if (currentCenter) {
+        const dx = Math.abs(currentCenter[0] - targetCenter[0]);
+        const dy = Math.abs(currentCenter[1] - targetCenter[1]);
+        if (dx < 1000 && dy < 1000) return; // Ignorar cambios pequeños
+      }
+
+      isProgrammaticMove = true;
+      olMap.value.getView().animate({
+        center: targetCenter,
+        duration: 250
+      }, () => {
+        // Callback cuando termina la animación
+        isProgrammaticMove = false;
+      });
     }
   );
 });
@@ -294,9 +329,10 @@ onMounted(async () => {
 
 <template>
   <div class="relative w-full h-full">
-    <div ref="mapRef" class="w-full h-full"></div>
-    <MapControls class="absolute top-4 right-4 z-10" />
-    <DrawTools v-if="!props.readonly" class="absolute bottom-4 left-4 z-10" :tiene-geometria="!!props.geometria" />
+    <!-- El mapa tiene z-0 para crear stacking context, los controles z-50 estarán encima -->
+    <div ref="mapRef" class="w-full h-full z-0"></div>
+    <MapControls class="absolute top-4 right-4 z-50" />
+    <DrawTools v-if="!props.readonly" class="absolute bottom-24 left-4 z-50" :tiene-geometria="!!props.geometria" />
     <!-- Tooltip -->
     <div
       ref="tooltipRef"

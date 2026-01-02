@@ -826,24 +826,78 @@ class IngestorLegal:
             self.clasificador.invalidar_cache()
 
 
-def extraer_texto_pdf(ruta_pdf: str) -> str:
+def extraer_texto_pdf(ruta_pdf: str, usar_ocr_vision: bool = True) -> str:
     """
     Extrae texto de un archivo PDF.
 
+    Intenta primero extracción nativa con PyMuPDF. Si el texto extraído
+    es insuficiente (< OCR_MIN_TEXT_THRESHOLD caracteres) y OCR está
+    habilitado, usa Claude Vision para OCR.
+
     Args:
         ruta_pdf: Ruta al archivo PDF
+        usar_ocr_vision: Si usar Claude Vision como fallback (default: True)
 
     Returns:
         Texto extraído
     """
     import fitz  # PyMuPDF
+    import logging
+    from app.core.config import settings
 
+    logger = logging.getLogger(__name__)
+
+    # Intento 1: Extracción nativa con PyMuPDF
     texto = ""
+    num_paginas = 0
     with fitz.open(ruta_pdf) as doc:
+        num_paginas = len(doc)
         for pagina in doc:
             texto += pagina.get_text()
 
-    return texto
+    texto_limpio = texto.strip()
+    chars_extraidos = len(texto_limpio)
+
+    logger.info(f"PyMuPDF extrajo {chars_extraidos} caracteres de {num_paginas} páginas")
+
+    # Verificar si necesitamos OCR
+    umbral = settings.OCR_MIN_TEXT_THRESHOLD
+    ocr_habilitado = settings.OCR_VISION_ENABLED and usar_ocr_vision
+
+    if chars_extraidos >= umbral:
+        # Texto suficiente, no necesitamos OCR
+        return texto
+
+    if not ocr_habilitado:
+        logger.warning(
+            f"Texto insuficiente ({chars_extraidos} < {umbral}) pero OCR deshabilitado"
+        )
+        return texto
+
+    # Intento 2: OCR con Claude Vision
+    logger.info(
+        f"Texto insuficiente ({chars_extraidos} < {umbral}), "
+        f"usando Claude Vision OCR..."
+    )
+
+    try:
+        from app.services.ocr import extraer_texto_con_vision
+
+        texto_ocr = extraer_texto_con_vision(ruta_pdf)
+
+        if len(texto_ocr.strip()) > chars_extraidos:
+            logger.info(
+                f"Claude Vision extrajo {len(texto_ocr)} caracteres "
+                f"(mejora: +{len(texto_ocr) - chars_extraidos})"
+            )
+            return texto_ocr
+        else:
+            logger.warning("Claude Vision no mejoró la extracción, usando texto original")
+            return texto
+
+    except Exception as e:
+        logger.error(f"Error en OCR con Claude Vision: {e}")
+        return texto
 
 
 def extraer_texto_docx(ruta_docx: str) -> str:

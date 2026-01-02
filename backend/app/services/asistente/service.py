@@ -309,10 +309,18 @@ class GestorMemoria:
                             "name": tc.get("name"),
                             "input": tc.get("input", {}),
                         })
-                mensajes.append({
-                    "role": "assistant",
-                    "content": content if len(content) > 1 else msg.contenido,
-                })
+                # Si hay tool_calls, siempre usar el formato de lista para content
+                # para asegurar que los tool_use blocks se incluyan correctamente
+                if msg.tool_calls:
+                    mensajes.append({
+                        "role": "assistant",
+                        "content": content,
+                    })
+                else:
+                    mensajes.append({
+                        "role": "assistant",
+                        "content": msg.contenido or "",
+                    })
             elif msg.rol == "tool":
                 mensajes.append({
                     "role": "user",
@@ -672,11 +680,13 @@ class AsistenteService:
         latencia_ms = int((time.time() - inicio) * 1000)
 
         # Guardar respuesta del asistente
+        # Nota: Los tool_calls ya fueron guardados en los mensajes intermedios dentro del loop,
+        # por lo que el mensaje final no debe incluirlos para evitar duplicados en el historial
         mensaje_guardado = await self.gestor_memoria.guardar_mensaje(
             conversacion_id=conversacion.id,
             rol="assistant",
             contenido=respuesta_final,
-            tool_calls=[tc.model_dump() for tc in tool_calls] if tool_calls else None,
+            tool_calls=None,  # Los tool_calls ya fueron guardados en mensajes intermedios
             fuentes=[f.model_dump() for f in fuentes] if fuentes else None,
             latencia_ms=latencia_ms,
             modelo_usado=settings.LLM_MODEL,
@@ -809,6 +819,19 @@ class AsistenteService:
             if response.stop_reason == "end_turn" or not tool_uses:
                 return texto_respuesta, tool_calls_realizados, fuentes, accion_pendiente
 
+            # Primero, guardar el mensaje del asistente con tool_use en la BD
+            # Esto debe hacerse ANTES de guardar los tool results para mantener el orden correcto
+            assistant_tool_calls = [
+                {"id": tu.id, "name": tu.name, "input": tu.input}
+                for tu in tool_uses
+            ]
+            await self.gestor_memoria.guardar_mensaje(
+                conversacion_id=conversacion_id,
+                rol="assistant",
+                contenido=texto_respuesta or "",
+                tool_calls=assistant_tool_calls,
+            )
+
             # Procesar tool_uses
             tool_results = []
             for tool_use in tool_uses:
@@ -842,7 +865,7 @@ class AsistenteService:
                 if resultado.exito and tool_use.name in ["buscar_normativa", "explicar_clasificacion"]:
                     fuentes.extend(self._extraer_fuentes(tool_use.name, resultado))
 
-            # Agregar respuesta del asistente y tool results al historial
+            # Agregar respuesta del asistente y tool results al historial local
             assistant_content = []
             if texto_respuesta:
                 assistant_content.append({"type": "text", "text": texto_respuesta})
@@ -923,12 +946,16 @@ Genera un mensaje breve y claro explicando lo que se va a hacer y pidiendo confi
         if tool_name == "buscar_normativa":
             fragmentos = resultado.contenido.get("fragmentos", [])
             for frag in fragmentos[:5]:  # Limitar a 5 fuentes
+                documento_id = frag.get("documento_id")
                 fuentes.append(FuenteCitada(
                     tipo="legal",
                     titulo=frag.get("documento_titulo", ""),
                     referencia=frag.get("articulo") or frag.get("seccion"),
                     fragmento=frag.get("contenido", "")[:200],
                     confianza=frag.get("similitud"),
+                    documento_id=documento_id,
+                    url_documento=f"/corpus?doc={documento_id}" if documento_id else None,
+                    url_descarga=f"/api/v1/corpus/{documento_id}/archivo" if documento_id else None,
                 ))
 
         elif tool_name == "explicar_clasificacion":

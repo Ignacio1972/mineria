@@ -246,6 +246,22 @@ export async function descargarArchivo(
   window.URL.revokeObjectURL(link.href)
 }
 
+export async function descargarContenido(
+  documentoId: number,
+  nombreArchivo?: string
+): Promise<void> {
+  const response = await apiClient.get(`/corpus/${documentoId}/contenido`, {
+    responseType: 'blob',
+  })
+
+  const blob = new Blob([response.data], { type: 'text/plain; charset=utf-8' })
+  const link = document.createElement('a')
+  link.href = window.URL.createObjectURL(blob)
+  link.download = nombreArchivo || `documento_${documentoId}.txt`
+  link.click()
+  window.URL.revokeObjectURL(link.href)
+}
+
 // ============================================================================
 // RELACIONES
 // ============================================================================
@@ -314,6 +330,7 @@ export const corpusService = {
   // Archivos
   archivos: {
     descargar: descargarArchivo,
+    descargarContenido: descargarContenido,
   },
   // Relaciones
   relaciones: {

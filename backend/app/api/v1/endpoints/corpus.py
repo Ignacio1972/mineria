@@ -106,6 +106,10 @@ class DocumentoDetalleResponse(DocumentoResponse):
     resumen: Optional[str]
     palabras_clave: List[str] = []
 
+    # Contenido completo del documento
+    contenido_completo: Optional[str] = None
+    contenido_chars: int = 0
+
     # Archivo
     archivo_nombre: Optional[str] = None
     archivo_tipo: Optional[str] = None
@@ -587,6 +591,10 @@ async def obtener_documento(
         resumen=documento.resumen,
         palabras_clave=documento.palabras_clave or [],
 
+        # Contenido completo
+        contenido_completo=documento.contenido_completo,
+        contenido_chars=len(documento.contenido_completo) if documento.contenido_completo else 0,
+
         tiene_archivo=archivo is not None,
         archivo_nombre=archivo.nombre_original if archivo else None,
         archivo_tipo=archivo.mime_type if archivo else None,
@@ -692,6 +700,56 @@ async def descargar_archivo_documento(
         path=str(ruta),
         filename=archivo.nombre_original,
         media_type=archivo.mime_type,
+    )
+
+
+@router.get(
+    "/{documento_id}/contenido",
+    summary="Descargar contenido como TXT",
+    description="Descarga el contenido del documento como archivo de texto plano."
+)
+async def descargar_contenido_documento(
+    documento_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Descarga el contenido del documento como TXT."""
+    from fastapi.responses import Response
+
+    documento = await db.get(Documento, documento_id)
+    if not documento:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    if not documento.contenido_completo:
+        raise HTTPException(status_code=404, detail="Este documento no tiene contenido de texto")
+
+    # Generar nombre de archivo seguro
+    nombre_seguro = "".join(c for c in documento.titulo if c.isalnum() or c in (' ', '-', '_')).strip()
+    nombre_seguro = nombre_seguro[:100]  # Limitar longitud
+    if documento.numero:
+        nombre_archivo = f"{documento.tipo}_{documento.numero}_{nombre_seguro}.txt"
+    else:
+        nombre_archivo = f"{documento.tipo}_{nombre_seguro}.txt"
+
+    # Crear encabezado con metadatos
+    encabezado = f"""================================================================================
+{documento.titulo}
+================================================================================
+Tipo: {documento.tipo}
+Numero: {documento.numero or 'N/A'}
+Organismo: {documento.organismo or 'N/A'}
+Fecha publicacion: {documento.fecha_publicacion or 'N/A'}
+Estado: {documento.estado}
+================================================================================
+
+"""
+    contenido_final = encabezado + documento.contenido_completo
+
+    return Response(
+        content=contenido_final.encode('utf-8'),
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nombre_archivo}"'
+        }
     )
 
 

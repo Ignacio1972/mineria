@@ -227,6 +227,78 @@ def extraer_texto_pdf(ruta_pdf: Path) -> str:
         return ""
 
 
+def calcular_sha256(ruta_archivo: Path) -> str:
+    """Calcula hash SHA256 del contenido del archivo."""
+    sha256 = hashlib.sha256()
+    with open(ruta_archivo, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def contar_paginas_pdf(ruta_pdf: Path) -> int:
+    """Cuenta las páginas de un PDF usando PyMuPDF."""
+    try:
+        import fitz
+        with fitz.open(str(ruta_pdf)) as doc:
+            return len(doc)
+    except Exception as e:
+        logger.warning(f"Error contando páginas de {ruta_pdf}: {e}")
+        return 0
+
+
+async def crear_archivo_original(
+    session: AsyncSession,
+    ruta_pdf: Path,
+    nombre_archivo: str
+) -> Optional[int]:
+    """
+    Crea o recupera un registro en archivos_originales para el PDF.
+
+    Returns:
+        ID del archivo en la BD
+    """
+    # Calcular metadata
+    tamano = ruta_pdf.stat().st_size
+    hash_sha256 = calcular_sha256(ruta_pdf)
+    paginas = contar_paginas_pdf(ruta_pdf)
+
+    # Verificar si ya existe
+    existing = await session.execute(
+        text("SELECT id FROM legal.archivos_originales WHERE hash_sha256 = :hash"),
+        {"hash": hash_sha256}
+    )
+    row = existing.fetchone()
+    if row:
+        return row[0]
+
+    # Crear registro
+    ruta_storage = f"legal/guias_sea/{nombre_archivo}"
+
+    result = await session.execute(
+        text("""
+            INSERT INTO legal.archivos_originales
+            (nombre_original, nombre_storage, ruta_storage, mime_type,
+             tamano_bytes, hash_sha256, paginas, procesado_at, subido_por)
+            VALUES (:nombre_original, :nombre_storage, :ruta_storage,
+                    :mime_type, :tamano, :hash, :paginas, :procesado_at, :subido_por)
+            RETURNING id
+        """),
+        {
+            "nombre_original": nombre_archivo,
+            "nombre_storage": nombre_archivo,
+            "ruta_storage": ruta_storage,
+            "mime_type": "application/pdf",
+            "tamano": tamano,
+            "hash": hash_sha256,
+            "paginas": paginas,
+            "procesado_at": datetime.now(),
+            "subido_por": "ingestar_guias_sea.py",
+        }
+    )
+    return result.scalar()
+
+
 def detectar_triggers(texto: str) -> List[str]:
     """Detecta triggers del Art. 11 en el texto."""
     texto_lower = texto.lower()
@@ -280,9 +352,11 @@ async def ingestar_documento(
     session: AsyncSession,
     doc_data: Dict,
     contenido: str,
-    embedding_service
+    embedding_service,
+    ruta_pdf: Path = None,
+    nombre_archivo: str = None
 ) -> Optional[int]:
-    """Ingesta un documento al corpus RAG."""
+    """Ingesta un documento al corpus RAG con vinculación de PDF."""
 
     titulo = doc_data['nombre']
 
@@ -304,14 +378,19 @@ async def ingestar_documento(
         except:
             pass
 
-    # Insertar documento
+    # Crear/obtener archivo original si se proporciona PDF
+    archivo_id = None
+    if ruta_pdf and nombre_archivo and ruta_pdf.exists():
+        archivo_id = await crear_archivo_original(session, ruta_pdf, nombre_archivo)
+
+    # Insertar documento con archivo_id
     result = await session.execute(
         text("""
             INSERT INTO legal.documentos
             (titulo, tipo, fecha_publicacion, organismo, url_fuente,
-             contenido_completo, triggers_art11, componentes_ambientales, estado)
+             contenido_completo, triggers_art11, componentes_ambientales, estado, archivo_id)
             VALUES (:titulo, :tipo, :fecha, :organismo, :url,
-                    :contenido, :triggers, :componentes, 'vigente')
+                    :contenido, :triggers, :componentes, 'vigente', :archivo_id)
             RETURNING id
         """),
         {
@@ -323,6 +402,7 @@ async def ingestar_documento(
             "contenido": contenido,
             "triggers": triggers,
             "componentes": componentes,
+            "archivo_id": archivo_id,
         }
     )
     documento_id = result.scalar()
@@ -505,10 +585,12 @@ async def main():
                     stats["errores"] += 1
                     continue
 
-                # Ingestar
+                # Ingestar con vinculación de PDF
                 try:
                     doc_id = await ingestar_documento(
-                        session, doc, contenido, embedding_service
+                        session, doc, contenido, embedding_service,
+                        ruta_pdf=ruta_pdf,
+                        nombre_archivo=nombre_archivo
                     )
                     if doc_id:
                         stats["ingestados"] += 1

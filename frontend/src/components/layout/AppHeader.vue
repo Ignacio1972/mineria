@@ -1,15 +1,27 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 
 const route = useRoute()
 const uiStore = useUIStore()
 
+const herramientasMenu = ref<HTMLDetailsElement | null>(null)
+const proyectosMenu = ref<HTMLDetailsElement | null>(null)
+
 const rutaActual = computed(() => route.name as string)
 
 function esRutaActiva(rutas: string[]) {
   return rutas.some((r) => rutaActual.value?.startsWith(r))
+}
+
+function cerrarMenu(menu: 'herramientas' | 'proyectos') {
+  if (menu === 'herramientas' && herramientasMenu.value) {
+    herramientasMenu.value.open = false
+  }
+  if (menu === 'proyectos' && proyectosMenu.value) {
+    proyectosMenu.value.open = false
+  }
 }
 </script>
 
@@ -56,28 +68,32 @@ function esRutaActiva(rutas: string[]) {
           </router-link>
         </li>
         <li>
-          <router-link
-            :to="{ name: 'clientes' }"
-            class="text-primary-content"
-            :class="{ 'bg-primary-focus': esRutaActiva(['cliente']) }"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-            </svg>
-            Clientes
-          </router-link>
-        </li>
-        <li>
-          <router-link
-            :to="{ name: 'proyectos' }"
-            class="text-primary-content"
-            :class="{ 'bg-primary-focus': esRutaActiva(['proyecto']) }"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-            Proyectos
-          </router-link>
+          <details ref="proyectosMenu">
+            <summary class="text-primary-content" :class="{ 'bg-primary-focus': esRutaActiva(['proyecto', 'cliente']) }">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              Proyectos
+            </summary>
+            <ul class="bg-base-100 text-base-content rounded-box z-50 w-48">
+              <li>
+                <router-link :to="{ name: 'proyectos' }" @click="cerrarMenu('proyectos')">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                  Proyectos
+                </router-link>
+              </li>
+              <li>
+                <router-link :to="{ name: 'clientes' }" @click="cerrarMenu('proyectos')">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Clientes
+                </router-link>
+              </li>
+            </ul>
+          </details>
         </li>
         <li>
           <router-link
@@ -116,14 +132,32 @@ function esRutaActiva(rutas: string[]) {
           </router-link>
         </li>
         <li>
-          <details>
+          <details ref="herramientasMenu">
             <summary class="text-primary-content">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
               Herramientas
             </summary>
-            <ul class="bg-base-100 text-base-content rounded-box z-50 w-48">
+            <ul class="bg-base-100 text-base-content rounded-box z-50 w-56">
+              <li class="menu-title">Mapas SEA</li>
+              <li>
+                <router-link :to="{ name: 'seia-proyectos' }" @click="cerrarMenu('herramientas')">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                  </svg>
+                  Proyectos SEIA
+                </router-link>
+              </li>
+              <li>
+                <router-link :to="{ name: 'seia-lineas-base' }" @click="cerrarMenu('herramientas')">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Lineas de Base EIA
+                </router-link>
+              </li>
+              <li class="menu-title">Desarrollo</li>
               <li>
                 <a
                   href="http://148.113.205.115:9085/geoserver/web/"

@@ -95,6 +95,10 @@ export interface DocumentoDetalle extends DocumentoResumen {
   actor_principal: string | null
   resumen: string | null
   palabras_clave: string[]
+  // Contenido del documento
+  contenido_completo: string | null
+  contenido_chars: number
+  // Archivo original
   archivo_nombre: string | null
   archivo_tipo: string | null
   archivo_tamano_mb: number | null

@@ -98,6 +98,20 @@ const routes: RouteRecordRaw[] = [
     meta: { title: 'Asistente IA' }
   },
 
+  // Mapas SEA externos
+  {
+    path: '/seia/proyectos',
+    name: 'seia-proyectos',
+    component: () => import('@/views/SeiaProyectosView.vue'),
+    meta: { title: 'Mapa Proyectos SEIA' }
+  },
+  {
+    path: '/seia/lineas-base',
+    name: 'seia-lineas-base',
+    component: () => import('@/views/SeiaLineasBaseView.vue'),
+    meta: { title: 'Lineas de Base EIA' }
+  },
+
   // 404
   {
     path: '/:pathMatch(.*)*',

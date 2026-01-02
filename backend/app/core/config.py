@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "claude-sonnet-4-20250514"
     LLM_MAX_TOKENS: int = 4096
 
+    # OCR con Claude Vision
+    OCR_VISION_ENABLED: bool = True
+    OCR_VISION_MODEL: str = "claude-sonnet-4-20250514"
+    OCR_MIN_TEXT_THRESHOLD: int = 100  # Caracteres mínimos antes de usar OCR
+    OCR_MAX_PAGES: int = 50  # Máximo de páginas a procesar con OCR
+    OCR_IMAGE_DPI: int = 200  # DPI para conversión PDF a imagen
+
     # LLM - Perplexity
     PERPLEXITY_API_KEY: str = ""
     PERPLEXITY_DEFAULT_MODEL: str = "sonar-pro"

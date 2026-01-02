@@ -19,7 +19,7 @@ const store = useCorpusStore()
 
 // UI State
 const vistaActiva = ref<'lista' | 'detalle'>('lista')
-const tabActiva = ref<'info' | 'fragmentos' | 'relaciones' | 'pdf'>('info')
+const tabActiva = ref<'info' | 'contenido' | 'fragmentos' | 'relaciones' | 'pdf'>('info')
 const mostrarFiltros = ref(false)
 const mostrarFormulario = ref(false)
 const mostrarEditar = ref(false)
@@ -279,7 +279,7 @@ onMounted(async () => {
                 <div class="flex items-start gap-3">
                   <!-- Icono tipo -->
                   <div class="avatar placeholder">
-                    <div class="bg-base-300 text-base-content rounded-lg w-10 h-10">
+                    <div class="bg-base-300 text-base-content rounded-lg w-10 h-10 flex items-center justify-center">
                       <span class="text-xs font-bold">{{ doc.tipo.substring(0, 2).toUpperCase() }}</span>
                     </div>
                   </div>
@@ -383,6 +383,7 @@ onMounted(async () => {
                   </svg>
                   Editar
                 </button>
+                <!-- Descargar archivo original (PDF) -->
                 <button
                   v-if="documentoSeleccionado.tiene_archivo"
                   class="btn btn-ghost btn-sm"
@@ -391,7 +392,18 @@ onMounted(async () => {
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                   </svg>
-                  Descargar
+                  PDF
+                </button>
+                <!-- Descargar contenido como TXT -->
+                <button
+                  v-if="documentoSeleccionado.contenido_chars > 0"
+                  class="btn btn-ghost btn-sm"
+                  @click="store.descargarContenidoDocumento()"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  TXT
                 </button>
                 <button class="btn btn-error btn-sm" @click="eliminarDocumento">
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -410,6 +422,18 @@ onMounted(async () => {
               @click="tabActiva = 'info'"
             >
               Informacion
+            </button>
+            <button
+              v-if="documentoSeleccionado.contenido_chars > 0"
+              class="tab"
+              :class="tabActiva === 'contenido' ? 'tab-active' : ''"
+              @click="tabActiva = 'contenido'"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Contenido
+              <span class="badge badge-xs badge-ghost ml-1">{{ Math.round(documentoSeleccionado.contenido_chars / 1000) }}k</span>
             </button>
             <button
               v-if="documentoSeleccionado.tiene_archivo"
@@ -449,6 +473,29 @@ onMounted(async () => {
                 @cerrar="tabActiva = 'info'"
                 @descargar="store.descargarArchivoDocumento()"
               />
+            </div>
+
+            <!-- Tab Contenido -->
+            <div v-else-if="tabActiva === 'contenido'" class="h-full flex flex-col">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2 text-sm opacity-60">
+                  <span>{{ documentoSeleccionado.contenido_chars.toLocaleString() }} caracteres</span>
+                  <span>|</span>
+                  <span>~{{ Math.ceil(documentoSeleccionado.contenido_chars / 5) }} palabras</span>
+                </div>
+                <button
+                  class="btn btn-sm btn-outline"
+                  @click="store.descargarContenidoDocumento()"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Descargar TXT
+                </button>
+              </div>
+              <div class="flex-1 overflow-auto bg-base-200 rounded-lg p-4">
+                <pre class="whitespace-pre-wrap text-sm font-mono leading-relaxed">{{ documentoSeleccionado.contenido_completo }}</pre>
+              </div>
             </div>
 
             <!-- Tab Info -->

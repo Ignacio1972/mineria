@@ -74,6 +74,10 @@ class FuenteCitada(BaseModel):
     referencia: Optional[str] = None  # articulo, seccion, URL
     fragmento: Optional[str] = None
     confianza: Optional[float] = None
+    # Campos para acceso al documento original
+    documento_id: Optional[int] = None
+    url_documento: Optional[str] = None  # URL para ver el documento en el visor
+    url_descarga: Optional[str] = None  # URL para descargar el PDF directamente
 
 
 # =============================================================================

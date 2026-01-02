@@ -16,6 +16,7 @@ import {
   obtenerFragmentos,
   reprocesarDocumento,
   descargarArchivo,
+  descargarContenido,
 } from '@/services/corpus'
 import type {
   Categoria,
@@ -378,6 +379,18 @@ export const useCorpusStore = defineStore('corpus', () => {
     }
   }
 
+  async function descargarContenidoDocumento() {
+    if (!documentoActual.value) return
+
+    try {
+      const nombre = `${documentoActual.value.tipo}_${documentoActual.value.titulo.substring(0, 50)}.txt`
+      await descargarContenido(documentoActual.value.id, nombre)
+    } catch (e) {
+      error.value = (e as { detail?: string })?.detail || 'Error descargando contenido'
+      console.error('Error descargando contenido:', e)
+    }
+  }
+
   // ============================================================================
   // ACTIONS - FILTROS Y PAGINACION
   // ============================================================================
@@ -479,6 +492,7 @@ export const useCorpusStore = defineStore('corpus', () => {
 
     // Actions - Archivos
     descargarArchivoDocumento,
+    descargarContenidoDocumento,
 
     // Actions - Filtros
     aplicarFiltro,

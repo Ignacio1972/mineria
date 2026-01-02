@@ -98,8 +98,8 @@ function cancelar() {
         @update:geometria="onGeometriaChange"
       />
 
-      <!-- Instrucciones -->
-      <div class="absolute bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-80">
+      <!-- Instrucciones (posicionado arriba de DrawTools en móvil, z-40 para estar debajo de controles z-50) -->
+      <div class="absolute bottom-20 left-4 right-4 md:bottom-4 md:left-auto md:right-4 md:w-80 z-40">
         <div class="card bg-base-100 shadow-lg">
           <div class="card-body p-4">
             <h3 class="font-semibold text-sm mb-2">Instrucciones</h3>

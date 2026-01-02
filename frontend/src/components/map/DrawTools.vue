@@ -19,7 +19,7 @@ const geometriaPresente = computed(() => props.tieneGeometria ?? false);
 </script>
 
 <template>
-  <div class="bg-base-100 rounded-lg shadow-lg p-2">
+  <div class="bg-base-100 rounded-lg shadow-lg p-2 border-4 border-red-500">
     <div class="flex gap-2">
       <div class="tooltip" data-tip="Dibujar polígono">
         <button
