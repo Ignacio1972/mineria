@@ -9,15 +9,13 @@ Endpoint principal que integra:
 """
 
 import logging
-import hashlib
-import json
+import time
 from typing import Any, Optional
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from geoalchemy2.shape import to_shape
@@ -36,148 +34,31 @@ from app.schemas.auditoria import (
     AuditoriaAnalisisResponse,
     MetricasEjecucion,
 )
+from app.schemas.prefactibilidad import (
+    DatosProyectoInput,
+    GeometriaInput,
+    AnalisisPrefactibilidadInput,
+    TriggerResponse,
+    AlertaResponse,
+    ClasificacionResponse,
+    SeccionInformeResponse,
+    AnalisisPrefactibilidadResponse,
+    AnalisisRapidoResponse,
+    EliminarAnalisisResponse,
+)
+from app.services.prefactibilidad import (
+    ServicioPrefactibilidad,
+    construir_datos_proyecto,
+    calcular_checksum,
+    extraer_capas_usadas,
+    extraer_normativa_citada,
+    descripcion_seccion,
+)
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-# === Schemas de Request/Response ===
-
-class DatosProyectoInput(BaseModel):
-    """Datos del proyecto minero para análisis"""
-    nombre: str = Field(..., description="Nombre del proyecto", min_length=3)
-    tipo_mineria: Optional[str] = Field(None, description="Tipo de minería (ej: 'Tajo abierto', 'Subterránea')")
-    mineral_principal: Optional[str] = Field(None, description="Mineral principal a extraer")
-    fase: Optional[str] = Field(None, description="Fase del proyecto (ej: 'Exploración', 'Explotación')")
-    titular: Optional[str] = Field(None, description="Nombre del titular del proyecto")
-    region: Optional[str] = Field(None, description="Región de ubicación")
-    comuna: Optional[str] = Field(None, description="Comuna de ubicación")
-    superficie_ha: Optional[float] = Field(None, description="Superficie del proyecto en hectáreas", ge=0)
-    produccion_estimada: Optional[str] = Field(None, description="Producción estimada")
-    vida_util_anos: Optional[int] = Field(None, description="Vida útil estimada en años", ge=0)
-    uso_agua_lps: Optional[float] = Field(None, description="Uso de agua en litros por segundo", ge=0)
-    fuente_agua: Optional[str] = Field(None, description="Fuente de agua (ej: 'Subterránea', 'Superficial', 'Mar')")
-    energia_mw: Optional[float] = Field(None, description="Energía requerida en MW", ge=0)
-    trabajadores_construccion: Optional[int] = Field(None, description="Trabajadores en fase de construcción", ge=0)
-    trabajadores_operacion: Optional[int] = Field(None, description="Trabajadores en fase de operación", ge=0)
-    inversion_musd: Optional[float] = Field(None, description="Inversión estimada en millones de USD", ge=0)
-    descripcion: Optional[str] = Field(None, description="Descripción adicional del proyecto")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "nombre": "Proyecto Minero Los Andes",
-                "tipo_mineria": "Tajo abierto",
-                "mineral_principal": "Cobre",
-                "fase": "Explotación",
-                "titular": "Minera Ejemplo SpA",
-                "region": "Antofagasta",
-                "comuna": "Calama",
-                "superficie_ha": 500,
-                "vida_util_anos": 25,
-                "uso_agua_lps": 150,
-                "fuente_agua": "Subterránea",
-                "trabajadores_construccion": 800,
-                "trabajadores_operacion": 400,
-                "inversion_musd": 2500,
-            }
-        }
-
-
-class GeometriaInput(BaseModel):
-    """Geometría GeoJSON del proyecto"""
-    type: str = Field(..., description="Tipo de geometría (Polygon, MultiPolygon)")
-    coordinates: list = Field(..., description="Coordenadas de la geometría")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "type": "Polygon",
-                "coordinates": [[
-                    [-68.9, -22.5],
-                    [-68.8, -22.5],
-                    [-68.8, -22.4],
-                    [-68.9, -22.4],
-                    [-68.9, -22.5]
-                ]]
-            }
-        }
-
-
-class AnalisisPrefactibilidadInput(BaseModel):
-    """Input completo para análisis de prefactibilidad"""
-    proyecto: DatosProyectoInput
-    geometria: GeometriaInput
-    generar_informe_llm: bool = Field(
-        True,
-        description="Si es True, genera informe con LLM. Si es False, solo análisis automático."
-    )
-    secciones: Optional[list[str]] = Field(
-        None,
-        description="Secciones específicas a generar. Si es None, genera todas."
-    )
-
-
-class TriggerResponse(BaseModel):
-    """Respuesta de un trigger detectado"""
-    letra: str
-    descripcion: str
-    detalle: str
-    severidad: str
-    fundamento_legal: str
-    peso: float
-
-
-class AlertaResponse(BaseModel):
-    """Respuesta de una alerta detectada"""
-    id: str
-    nivel: str
-    categoria: str
-    titulo: str
-    descripcion: str
-    acciones_requeridas: list[str]
-
-
-class ClasificacionResponse(BaseModel):
-    """Respuesta de clasificación SEIA"""
-    via_ingreso_recomendada: str
-    confianza: float
-    nivel_confianza: str
-    justificacion: str
-    puntaje_matriz: float
-
-
-class SeccionInformeResponse(BaseModel):
-    """Respuesta de una sección del informe"""
-    seccion: str
-    titulo: str
-    contenido: str
-
-
-class AnalisisPrefactibilidadResponse(BaseModel):
-    """Respuesta completa del análisis de prefactibilidad"""
-    id: str
-    fecha_analisis: str
-    proyecto: dict
-    resultado_gis: dict
-    clasificacion_seia: ClasificacionResponse
-    triggers: list[TriggerResponse]
-    alertas: list[AlertaResponse]
-    normativa_citada: list[dict]
-    informe: Optional[dict] = None
-    metricas: dict
-
-
-class AnalisisRapidoResponse(BaseModel):
-    """Respuesta del análisis rápido (sin LLM)"""
-    via_ingreso_recomendada: str
-    confianza: float
-    triggers_detectados: int
-    alertas_criticas: int
-    alertas_altas: int
-    resumen: str
 
 
 # === Dependencias ===
@@ -202,7 +83,69 @@ def get_generador_informes() -> GeneradorInformes:
     return GeneradorInformes()
 
 
+def get_servicio_prefactibilidad(
+    buscador: BuscadorLegal = Depends(get_buscador_legal),
+    motor_reglas: MotorReglasSSEIA = Depends(get_motor_reglas),
+    sistema_alertas: SistemaAlertas = Depends(get_sistema_alertas),
+    generador: GeneradorInformes = Depends(get_generador_informes),
+) -> ServicioPrefactibilidad:
+    """Obtiene instancia del servicio de prefactibilidad."""
+    return ServicioPrefactibilidad(
+        buscador=buscador,
+        motor_reglas=motor_reglas,
+        sistema_alertas=sistema_alertas,
+        generador=generador,
+    )
+
+
 # === Endpoints ===
+
+def _resultado_a_response(resultado, generar_informe_llm: bool) -> AnalisisPrefactibilidadResponse:
+    """Convierte ResultadoAnalisis a AnalisisPrefactibilidadResponse."""
+    return AnalisisPrefactibilidadResponse(
+        id=resultado.id,
+        fecha_analisis=resultado.fecha_analisis,
+        proyecto=resultado.datos_proyecto,
+        resultado_gis=resultado.resultado_gis,
+        clasificacion_seia=ClasificacionResponse(
+            via_ingreso_recomendada=resultado.clasificacion.via_ingreso.value,
+            confianza=resultado.clasificacion.confianza,
+            nivel_confianza=resultado.clasificacion.nivel_confianza.value,
+            justificacion=resultado.clasificacion.justificacion,
+            puntaje_matriz=resultado.clasificacion.puntaje_matriz,
+        ),
+        triggers=[
+            TriggerResponse(
+                letra=t.letra.value,
+                descripcion=t.descripcion,
+                detalle=t.detalle,
+                severidad=t.severidad.value,
+                fundamento_legal=t.fundamento_legal,
+                peso=t.peso,
+            )
+            for t in resultado.clasificacion.triggers
+        ],
+        alertas=[
+            AlertaResponse(
+                id=a["id"],
+                nivel=a["nivel"],
+                categoria=a["categoria"],
+                titulo=a["titulo"],
+                descripcion=a["descripcion"],
+                acciones_requeridas=a.get("acciones_requeridas", []),
+            )
+            for a in resultado.alertas_dict
+        ],
+        normativa_citada=resultado.normativa_relevante[:20],
+        informe=resultado.informe,
+        metricas={
+            "tiempo_total_ms": resultado.tiempo_total_ms,
+            "con_informe_llm": generar_informe_llm,
+            "triggers_detectados": len(resultado.clasificacion.triggers),
+            "alertas_generadas": len(resultado.alertas),
+        }
+    )
+
 
 @router.post(
     "/analisis",
@@ -224,131 +167,26 @@ def get_generador_informes() -> GeneradorInformes:
 async def analizar_prefactibilidad(
     input_data: AnalisisPrefactibilidadInput,
     db: AsyncSession = Depends(get_db),
-    buscador: BuscadorLegal = Depends(get_buscador_legal),
-    motor_reglas: MotorReglasSSEIA = Depends(get_motor_reglas),
-    sistema_alertas: SistemaAlertas = Depends(get_sistema_alertas),
-    generador: GeneradorInformes = Depends(get_generador_informes),
+    servicio: ServicioPrefactibilidad = Depends(get_servicio_prefactibilidad),
 ) -> AnalisisPrefactibilidadResponse:
-    """
-    Endpoint principal de análisis de prefactibilidad ambiental.
-    """
-    import time
-    import uuid
-
-    inicio = time.time()
-    logger.info(f"Iniciando análisis de prefactibilidad: {input_data.proyecto.nombre}")
-
+    """Endpoint principal de análisis de prefactibilidad ambiental."""
     try:
-        # 1. Convertir geometría a formato GeoJSON
+        # Convertir geometría a formato GeoJSON
         geojson = {
             "type": input_data.geometria.type,
             "coordinates": input_data.geometria.coordinates,
         }
 
-        # 2. Ejecutar análisis espacial GIS
-        logger.info("Ejecutando análisis GIS...")
-        resultado_gis = await analizar_proyecto_espacial(db, geojson)
-
-        # 3. Preparar datos del proyecto
-        datos_proyecto = input_data.proyecto.model_dump()
-
-        # 4. Ejecutar motor de reglas SEIA
-        logger.info("Ejecutando motor de reglas SEIA...")
-        clasificacion = motor_reglas.clasificar_proyecto(resultado_gis, datos_proyecto)
-
-        # 5. Generar alertas
-        logger.info("Generando alertas...")
-        alertas = sistema_alertas.generar_alertas(resultado_gis, datos_proyecto)
-        alertas_dict = [a.to_dict() for a in alertas]
-
-        # 6. Buscar normativa relevante
-        logger.info("Buscando normativa relevante...")
-        normativa_relevante = await _buscar_normativa_contextual(
-            db, buscador, clasificacion, alertas
+        # Ejecutar análisis usando el servicio
+        resultado = await servicio.ejecutar_analisis(
+            db=db,
+            geojson=geojson,
+            datos_proyecto=input_data.proyecto.model_dump(),
+            generar_informe=input_data.generar_informe_llm,
+            secciones=input_data.secciones,
         )
 
-        # 7. Generar informe con LLM (si se solicita)
-        informe_dict = None
-        if input_data.generar_informe_llm:
-            logger.info("Generando informe con LLM...")
-
-            # Mapear secciones si se especificaron
-            secciones_a_generar = None
-            if input_data.secciones:
-                try:
-                    secciones_a_generar = [
-                        SeccionInforme(s) for s in input_data.secciones
-                    ]
-                except ValueError as e:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Sección inválida: {e}"
-                    )
-
-            informe = await generador.generar_informe(
-                datos_proyecto=datos_proyecto,
-                resultado_gis=resultado_gis,
-                normativa_relevante=normativa_relevante,
-                secciones_a_generar=secciones_a_generar,
-            )
-            informe_dict = {
-                "secciones": [
-                    {
-                        "seccion": s.seccion.value,
-                        "titulo": s.titulo,
-                        "contenido": s.contenido,
-                    }
-                    for s in informe.secciones
-                ],
-                "texto_completo": informe.to_texto_plano(),
-            }
-
-        # 8. Preparar respuesta
-        tiempo_total = int((time.time() - inicio) * 1000)
-
-        return AnalisisPrefactibilidadResponse(
-            id=str(uuid.uuid4())[:8].upper(),
-            fecha_analisis=datetime.now().isoformat(),
-            proyecto=datos_proyecto,
-            resultado_gis=resultado_gis,
-            clasificacion_seia=ClasificacionResponse(
-                via_ingreso_recomendada=clasificacion.via_ingreso.value,
-                confianza=clasificacion.confianza,
-                nivel_confianza=clasificacion.nivel_confianza.value,
-                justificacion=clasificacion.justificacion,
-                puntaje_matriz=clasificacion.puntaje_matriz,
-            ),
-            triggers=[
-                TriggerResponse(
-                    letra=t.letra.value,
-                    descripcion=t.descripcion,
-                    detalle=t.detalle,
-                    severidad=t.severidad.value,
-                    fundamento_legal=t.fundamento_legal,
-                    peso=t.peso,
-                )
-                for t in clasificacion.triggers
-            ],
-            alertas=[
-                AlertaResponse(
-                    id=a["id"],
-                    nivel=a["nivel"],
-                    categoria=a["categoria"],
-                    titulo=a["titulo"],
-                    descripcion=a["descripcion"],
-                    acciones_requeridas=a.get("acciones_requeridas", []),
-                )
-                for a in alertas_dict
-            ],
-            normativa_citada=normativa_relevante[:20],
-            informe=informe_dict,
-            metricas={
-                "tiempo_total_ms": tiempo_total,
-                "con_informe_llm": input_data.generar_informe_llm,
-                "triggers_detectados": len(clasificacion.triggers),
-                "alertas_generadas": len(alertas),
-            }
-        )
+        return _resultado_a_response(resultado, input_data.generar_informe_llm)
 
     except Exception as e:
         logger.error(f"Error en análisis de prefactibilidad: {e}", exc_info=True)
@@ -374,95 +212,29 @@ async def analizar_prefactibilidad(
 async def analisis_rapido(
     input_data: AnalisisPrefactibilidadInput,
     db: AsyncSession = Depends(get_db),
-    buscador: BuscadorLegal = Depends(get_buscador_legal),
-    motor_reglas: MotorReglasSSEIA = Depends(get_motor_reglas),
-    sistema_alertas: SistemaAlertas = Depends(get_sistema_alertas),
+    servicio: ServicioPrefactibilidad = Depends(get_servicio_prefactibilidad),
 ) -> AnalisisPrefactibilidadResponse:
     """
     Análisis rápido sin generación de informe LLM.
     Retorna la estructura completa para compatibilidad con el frontend.
     """
-    import time
-    import uuid
-
-    inicio = time.time()
-    logger.info(f"Análisis rápido: {input_data.proyecto.nombre}")
-
     try:
-        # 1. Convertir geometría a formato GeoJSON
+        # Convertir geometría a formato GeoJSON
         geojson = {
             "type": input_data.geometria.type,
             "coordinates": input_data.geometria.coordinates,
         }
 
-        # 2. Ejecutar análisis espacial GIS
-        logger.info("Ejecutando análisis GIS...")
-        resultado_gis = await analizar_proyecto_espacial(db, geojson)
-
-        # 3. Preparar datos del proyecto
-        datos_proyecto = input_data.proyecto.model_dump()
-
-        # 4. Ejecutar motor de reglas SEIA
-        logger.info("Ejecutando motor de reglas SEIA...")
-        clasificacion = motor_reglas.clasificar_proyecto(resultado_gis, datos_proyecto)
-
-        # 5. Generar alertas
-        logger.info("Generando alertas...")
-        alertas = sistema_alertas.generar_alertas(resultado_gis, datos_proyecto)
-        alertas_dict = [a.to_dict() for a in alertas]
-
-        # 6. Buscar normativa relevante (versión ligera)
-        logger.info("Buscando normativa relevante...")
-        normativa_relevante = await _buscar_normativa_contextual(
-            db, buscador, clasificacion, alertas
+        # Ejecutar análisis SIN informe LLM
+        resultado = await servicio.ejecutar_analisis(
+            db=db,
+            geojson=geojson,
+            datos_proyecto=input_data.proyecto.model_dump(),
+            generar_informe=False,  # Sin LLM
+            secciones=None,
         )
 
-        # 7. Preparar respuesta (sin informe LLM)
-        tiempo_total = int((time.time() - inicio) * 1000)
-
-        return AnalisisPrefactibilidadResponse(
-            id=str(uuid.uuid4())[:8].upper(),
-            fecha_analisis=datetime.now().isoformat(),
-            proyecto=datos_proyecto,
-            resultado_gis=resultado_gis,
-            clasificacion_seia=ClasificacionResponse(
-                via_ingreso_recomendada=clasificacion.via_ingreso.value,
-                confianza=clasificacion.confianza,
-                nivel_confianza=clasificacion.nivel_confianza.value,
-                justificacion=clasificacion.justificacion,
-                puntaje_matriz=clasificacion.puntaje_matriz,
-            ),
-            triggers=[
-                TriggerResponse(
-                    letra=t.letra.value,
-                    descripcion=t.descripcion,
-                    detalle=t.detalle,
-                    severidad=t.severidad.value,
-                    fundamento_legal=t.fundamento_legal,
-                    peso=t.peso,
-                )
-                for t in clasificacion.triggers
-            ],
-            alertas=[
-                AlertaResponse(
-                    id=a["id"],
-                    nivel=a["nivel"],
-                    categoria=a["categoria"],
-                    titulo=a["titulo"],
-                    descripcion=a["descripcion"],
-                    acciones_requeridas=a.get("acciones_requeridas", []),
-                )
-                for a in alertas_dict
-            ],
-            normativa_citada=normativa_relevante[:20],
-            informe=None,  # Sin informe LLM en análisis rápido
-            metricas={
-                "tiempo_total_ms": tiempo_total,
-                "con_informe_llm": False,
-                "triggers_detectados": len(clasificacion.triggers),
-                "alertas_generadas": len(alertas),
-            }
-        )
+        return _resultado_a_response(resultado, generar_informe_llm=False)
 
     except Exception as e:
         logger.error(f"Error en análisis rápido: {e}", exc_info=True)
@@ -481,7 +253,7 @@ async def obtener_secciones_disponibles() -> dict[str, Any]:
             {
                 "id": s.value,
                 "nombre": GeneradorInformes.TITULOS_SECCIONES.get(s, s.value),
-                "descripcion": _descripcion_seccion(s),
+                "descripcion": descripcion_seccion(s),
             }
             for s in SeccionInforme
         ]
@@ -580,143 +352,7 @@ async def obtener_formatos_exportacion() -> dict[str, Any]:
     return {"formatos": exportador.obtener_formatos_disponibles()}
 
 
-# === Funciones auxiliares ===
-
-async def _buscar_normativa_contextual(
-    db: AsyncSession,
-    buscador: BuscadorLegal,
-    clasificacion: Any,
-    alertas: list,
-) -> list[dict]:
-    """Busca normativa relevante basada en el contexto del análisis."""
-    try:
-        normativa = []
-
-        # Buscar por triggers detectados
-        for trigger in clasificacion.triggers[:3]:
-            query = f"Art. 11 letra {trigger.letra.value} {trigger.descripcion}"
-            resultados = await buscador.buscar(db, query, limite=3)
-            for r in resultados:
-                normativa.append({
-                    "contenido": r.contenido,
-                    "documento": r.documento_titulo,
-                    "seccion": r.seccion,
-                    "relevancia": f"Trigger {trigger.letra.value}",
-                })
-
-        # Buscar por componentes ambientales afectados
-        componentes_query = set()
-        for alerta in alertas[:5]:
-            for comp in alerta.componentes_afectados:
-                componentes_query.add(comp.value.replace("_", " "))
-
-        for comp in list(componentes_query)[:3]:
-            resultados = await buscador.buscar(db, f"normativa {comp}", limite=2)
-            for r in resultados:
-                normativa.append({
-                    "contenido": r.contenido,
-                    "documento": r.documento_titulo,
-                    "seccion": r.seccion,
-                    "relevancia": f"Componente: {comp}",
-                })
-
-        return normativa
-    except Exception as e:
-        logger.warning(f"RAG no disponible, omitiendo búsqueda de normativa: {e}")
-        return []
-
-
-def _descripcion_seccion(seccion: SeccionInforme) -> str:
-    """Retorna descripción de cada sección."""
-    descripciones = {
-        SeccionInforme.RESUMEN_EJECUTIVO: "Síntesis de los hallazgos principales y recomendación",
-        SeccionInforme.DESCRIPCION_PROYECTO: "Características técnicas del proyecto minero",
-        SeccionInforme.ANALISIS_TERRITORIAL: "Análisis de sensibilidades territoriales identificadas",
-        SeccionInforme.EVALUACION_SEIA: "Evaluación de triggers Art. 11 y clasificación DIA/EIA",
-        SeccionInforme.NORMATIVA_APLICABLE: "Normativa ambiental aplicable al proyecto",
-        SeccionInforme.ALERTAS_AMBIENTALES: "Alertas ambientales por componente",
-        SeccionInforme.PERMISOS_REQUERIDOS: "Permisos ambientales sectoriales (PAS) requeridos",
-        SeccionInforme.LINEA_BASE_SUGERIDA: "Componentes de línea base ambiental sugeridos",
-        SeccionInforme.RECOMENDACIONES: "Recomendaciones técnicas y legales",
-        SeccionInforme.CONCLUSION: "Conclusión y próximos pasos",
-    }
-    return descripciones.get(seccion, "")
-
-
 # === Endpoint Integrado con Persistencia y Auditoria ===
-
-
-def _calcular_checksum(proyecto: Proyecto) -> str:
-    """Calcula SHA256 de los datos de entrada para reproducibilidad."""
-    datos = {
-        "proyecto_id": proyecto.id,
-        "nombre": proyecto.nombre,
-        "region": proyecto.region,
-        "comuna": proyecto.comuna,
-        "superficie_ha": float(proyecto.superficie_ha) if proyecto.superficie_ha else None,
-        "tipo_mineria": proyecto.tipo_mineria,
-        "geom_wkt": proyecto.geom.desc if proyecto.geom else None,
-        "timestamp": datetime.now().strftime("%Y-%m-%d"),
-    }
-    return hashlib.sha256(
-        json.dumps(datos, sort_keys=True, default=str).encode()
-    ).hexdigest()
-
-
-def _extraer_capas_usadas(resultado_gis: dict) -> list[dict]:
-    """Extrae lista de capas GIS usadas en el analisis."""
-    capas = []
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
-
-    capas_map = {
-        "areas_protegidas": "SNASPE / Areas Protegidas",
-        "glaciares": "Inventario Glaciares DGA",
-        "cuerpos_agua": "Cuerpos de Agua / Humedales",
-        "comunidades_indigenas": "Comunidades Indigenas / ADI",
-        "centros_poblados": "Centros Poblados INE",
-        "sitios_patrimoniales": "Sitios Patrimoniales CMN",
-    }
-
-    for capa_key, capa_nombre in capas_map.items():
-        elementos = resultado_gis.get(capa_key, [])
-        if isinstance(elementos, list):
-            capas.append({
-                "nombre": capa_nombre,
-                "fecha": fecha_hoy,
-                "version": "v2024.2",
-                "elementos_encontrados": len(elementos),
-            })
-
-    return capas
-
-
-def _extraer_normativa_citada(triggers: list, normativa_relevante: list) -> list[dict]:
-    """Extrae normativa citada del analisis."""
-    normativa = []
-
-    # De los triggers (Art. 11)
-    for trigger in triggers:
-        normativa.append({
-            "tipo": "Ley",
-            "numero": "19300",
-            "articulo": "11",
-            "letra": trigger.letra.value if hasattr(trigger, 'letra') else str(trigger.get('letra', '')),
-            "descripcion": trigger.descripcion if hasattr(trigger, 'descripcion') else trigger.get('descripcion', ''),
-        })
-
-    # De la normativa RAG
-    for norma in normativa_relevante[:10]:
-        if isinstance(norma, dict) and norma.get("documento"):
-            normativa.append({
-                "tipo": "Referencia",
-                "numero": norma.get("documento", ""),
-                "articulo": norma.get("seccion", ""),
-                "letra": None,
-                "descripcion": norma.get("relevancia", ""),
-            })
-
-    return normativa
-
 
 @router.post(
     "/analisis-integrado",
@@ -760,8 +396,6 @@ async def analisis_integrado(
     """
     Endpoint de analisis integrado con persistencia y auditoria.
     """
-    import time
-
     inicio_total = time.time()
     logger.info(f"Iniciando analisis integrado para proyecto_id={input_data.proyecto_id}")
 
@@ -930,9 +564,9 @@ async def analisis_integrado(
     # 10. Crear registro de auditoria
     logger.info("Creando registro de auditoria...")
 
-    checksum = _calcular_checksum(proyecto)
-    capas_usadas = _extraer_capas_usadas(resultado_gis)
-    normativa_citada = _extraer_normativa_citada(clasificacion.triggers, normativa_relevante)
+    checksum = calcular_checksum(proyecto)
+    capas_usadas = extraer_capas_usadas(resultado_gis)
+    normativa_citada = extraer_normativa_citada(clasificacion.triggers, normativa_relevante)
 
     auditoria = AuditoriaAnalisis(
         analisis_id=nuevo_analisis.id,
@@ -1186,15 +820,6 @@ async def obtener_ultimo_analisis(
             "recuperado_de_bd": True,
         }
     )
-
-
-class EliminarAnalisisResponse(BaseModel):
-    """Respuesta de eliminación de análisis"""
-    mensaje: str
-    analisis_id: int
-    proyecto_id: int
-    era_ultimo_analisis: bool
-    nuevo_estado_proyecto: Optional[str] = None
 
 
 @router.delete(

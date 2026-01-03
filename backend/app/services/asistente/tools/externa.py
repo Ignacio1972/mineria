@@ -11,6 +11,7 @@ from .base import (
     Herramienta,
     ResultadoHerramienta,
     CategoriaHerramienta,
+    ContextoHerramienta,
     PermisoHerramienta,
     registro_herramientas,
 )
@@ -46,6 +47,7 @@ IMPORTANTE: Usa esta herramienta cuando el usuario pregunte por:
 - Cualquier dato que pueda haber cambiado desde la carga del corpus local"""
 
     categoria = CategoriaHerramienta.EXTERNA
+    contexto_requerido = ContextoHerramienta.AMBOS
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 

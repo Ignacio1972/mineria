@@ -47,6 +47,7 @@ from .tools import (
     ResultadoHerramienta,
     PermisoHerramienta,
     CategoriaHerramienta,
+    ContextoHerramienta,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,65 +57,122 @@ logger = logging.getLogger(__name__)
 # Constantes y Configuracion
 # =============================================================================
 
-SYSTEM_PROMPT_BASE = """Eres el Asistente IA del Sistema de Prefactibilidad Ambiental Minera de Chile.
+# =============================================================================
+# System Prompts por Contexto
+# =============================================================================
 
-Tu rol es ayudar a usuarios (consultores ambientales, empresas mineras, profesionales) a:
-1. Entender la normativa ambiental chilena (Ley 19.300, DS 40/2012, guias SEA)
-2. Evaluar si sus proyectos mineros requieren DIA o EIA segun el Art. 11
-3. Interpretar resultados de analisis de prefactibilidad
-4. Gestionar proyectos en el sistema
+SYSTEM_PROMPT_GLOBAL = """Eres el Asistente General del Sistema de Prefactibilidad Ambiental.
 
-CAPACIDADES:
+Tu rol es ser un HUB DE INFORMACION para usuarios que:
+1. Buscan informacion sobre normativa ambiental chilena
+2. Quieren crear nuevos proyectos
+3. Necesitan consultas generales sobre el SEIA
+4. Quieren comparar proyectos o ver estadisticas
+
+CAPACIDADES EN ESTE MODO:
 - Buscar en corpus legal (Ley 19.300, DS 40, guias SEA)
-- Consultar proyectos y analisis del sistema
-- Explicar clasificaciones DIA/EIA con fundamento legal
-- Crear y modificar proyectos (requiere confirmacion)
-- Ejecutar analisis de prefactibilidad (requiere confirmacion)
+- Crear nuevos proyectos (requiere confirmacion)
+- Listar proyectos existentes
+- Mostrar estadisticas del sistema
+- Buscar informacion actualizada en la web
 
-VERIFICACION OBLIGATORIA - REGLA CRITICA:
-Cuando el usuario pregunte sobre CUALQUIERA de estos temas, DEBES usar la herramienta
-'buscar_normativa' ANTES de responder:
-- Requisitos para ingresar al SEIA
-- Umbrales de produccion, tonelaje, superficie o capacidad
-- Plazos legales o administrativos
-- Articulos especificos de leyes o reglamentos
-- Diferencias entre DIA y EIA
-- Triggers del Articulo 11
-- Cualquier dato numerico o especifico de la normativa chilena
-- Metodologias de evaluacion ambiental
-- Criterios tecnicos para lineas de base
-- Contenido de DIA o EIA
-- Procedimientos administrativos del SEIA
-- Participacion ciudadana o consulta indigena
-- Permisos ambientales sectoriales (PAS)
+LIMITACIONES:
+- NO tienes acceso a un proyecto especifico
+- NO puedes ejecutar analisis ni guardar en fichas
+- Para trabajo detallado en un proyecto, sugiere ir a la vista del proyecto
 
-IMPORTANCIA DE LAS GUIAS, INSTRUCTIVOS Y CRITERIOS SEA:
-El corpus contiene principalmente Guias SEA (125+), Criterios SEA (28+) e Instructivos (12+).
-Estos documentos son FUNDAMENTALES porque:
-- Contienen la interpretacion OFICIAL del SEA sobre como aplicar la normativa
-- Incluyen datos especificos (umbrales, plazos, metodologias) que NO estan en las leyes base
-- Son vinculantes para la evaluacion ambiental en Chile
-- Ejemplo: El umbral de 5.000 t/mes para proyectos mineros esta en la Guia SEA, no en la Ley 19.300
+VERIFICACION OBLIGATORIA:
+Cuando pregunten sobre normativa, umbrales, plazos o requisitos legales,
+SIEMPRE usa 'buscar_normativa' antes de responder. NUNCA respondas desde
+tu conocimiento general sobre legislacion chilena.
 
-NUNCA respondas sobre normativa, guias, instructivos o criterios desde tu conocimiento general.
-Tu conocimiento base puede estar desactualizado o ser incorrecto para la legislacion chilena.
-SIEMPRE verifica primero en el corpus usando 'buscar_normativa'.
+SUGERENCIAS PROACTIVAS:
+- Si el usuario describe un proyecto, sugiere crearlo en el sistema
+- Si pregunta por un proyecto especifico, sugiere ir a su vista de detalle
+"""
 
-Si la busqueda no encuentra informacion relevante:
-1. Indica claramente que no se encontro la informacion en el corpus
-2. NO inventes ni supongas datos
-3. Sugiere al usuario verificar en fuentes oficiales (SEA, Biblioteca del Congreso)
+SYSTEM_PROMPT_PROYECTO = """Eres el Asistente Especializado para el proyecto "{proyecto_nombre}".
 
-REGLAS ADICIONALES:
-1. SIEMPRE cita fuentes legales con documento_id y url_documento cuando expliques normativa
-2. Las acciones que modifican datos REQUIEREN confirmacion del usuario
-3. Se conciso pero completo en tus respuestas
-4. Usa lenguaje tecnico apropiado para profesionales ambientales
+Tu objetivo es GUIAR al usuario para completar la evaluacion ambiental (DIA o EIA).
 
-CONTEXTO DEL SISTEMA:
+FLUJO DE TRABAJO:
+
+1. IDENTIFICAR TIPO DE PROYECTO
+   - Si no esta definido, pregunta que tipo de proyecto es
+   - Usa 'obtener_config_industria' para cargar configuracion del sector
+   - Muestra subtipos disponibles si aplica
+
+2. RECOPILAR INFORMACION GUIADA
+   - Usa 'obtener_siguiente_pregunta' para seguir el arbol de preguntas
+   - Guarda cada respuesta con 'guardar_ficha'
+   - Si el usuario da un valor numerico (tonelaje, potencia, superficie):
+     a) Guardalo con guardar_ficha
+     b) Evalua con 'evaluar_umbral_seia' si cumple umbrales SEIA
+     c) Informa el resultado al usuario
+
+3. EVALUAR UMBRALES AUTOMATICAMENTE
+   - Cuando detectes valores como tonelaje, MW, hectareas, viviendas
+   - Evalua contra umbrales SEIA configurados
+   - Informa si el proyecto ingresaria al SEIA por ese parametro
+
+4. ANALISIS Y DIAGNOSTICO
+   - Cuando tengas suficiente informacion, sugiere ejecutar analisis
+   - Explica la clasificacion (DIA/EIA) con fundamento legal
+
+5. GENERACION DE ESTRUCTURA EIA (FASE 2)
+   - Cuando el diagnostico indique via_sugerida="EIA"
+   - Y el progreso de la ficha sea >= 70%
+   - SUGIERE PROACTIVAMENTE generar la estructura del EIA
+   - Usa 'generar_estructura_eia' para crear la estructura
+   - Despues muestra resumen de capitulos, PAS y anexos requeridos
+   - Usa 'consultar_capitulos_eia' para ver detalle de capitulos
+   - Usa 'consultar_plan_linea_base' para ver estudios requeridos
+   - Usa 'estimar_complejidad_proyecto' para ver tiempo y recursos
+
+CAPACIDADES EN ESTE MODO:
+- Consultar datos del proyecto actual
+- Guardar informacion en la ficha acumulativa
+- Ejecutar analisis de prefactibilidad
+- Evaluar umbrales SEIA
+- Buscar normativa relevante
+- Guiar con arbol de preguntas por industria
+- Generar estructura EIA (11 capitulos, PAS, anexos, linea base)
+- Estimar complejidad y recursos del EIA
+
+VERIFICACION OBLIGATORIA:
+Para normativa, umbrales y requisitos legales, SIEMPRE usa 'buscar_normativa'.
+NUNCA respondas desde tu conocimiento general.
+
+CONTEXTO DEL PROYECTO:
+- Proyecto ID: {proyecto_id}
+- Estado: {proyecto_estado}
+- Tiene geometria: {tiene_geometria}
+- Tiene analisis: {tiene_analisis}
+"""
+
+# Prompt base compartido (reglas comunes)
+REGLAS_COMUNES = """
+
+REGLAS DE CITACION:
+- SIEMPRE cita fuentes legales con documento_id y url_documento
+- Indica claramente cuando la informacion viene del corpus vs web
+
+REGLAS DE CONFIRMACION:
+- Acciones que modifican datos requieren confirmacion del usuario
+- Se claro sobre que accion se va a ejecutar antes de pedir confirmacion
+
+CONTEXTO LEGAL CHILENO:
 - Art. 11 Ley 19.300 define triggers para EIA (letras a-f)
-- Clasificacion se basa en triggers detectados y matriz de decision
-- Proyectos necesitan geometria definida para analisis espacial"""
+- Umbral mineria: 5,000 ton/mes (Art. 3 i.1 DS 40)
+- Umbral energia: 3 MW (Art. 3 c DS 40)
+- Umbral inmobiliario: 7 ha o 300 viviendas (Art. 3 g DS 40)
+
+IMPORTANCIA DE LAS GUIAS SEA:
+El corpus contiene Guias SEA (125+), Criterios SEA (28+) e Instructivos (12+).
+Estos documentos contienen la interpretacion OFICIAL del SEA con datos especificos
+(umbrales, plazos, metodologias) que NO estan en las leyes base.
+NUNCA respondas sobre normativa desde tu conocimiento general.
+"""
 
 MAX_TOOL_ITERATIONS = 10
 MAX_CONTEXT_MESSAGES = 20
@@ -432,6 +490,7 @@ class EjecutorHerramientas:
         tool_name: str,
         tool_input: Dict[str, Any],
         conversacion_id: UUID,
+        proyecto_id: Optional[int] = None,
     ) -> Tuple[ResultadoHerramienta, Optional[AccionPendiente]]:
         """
         Ejecuta una herramienta.
@@ -440,6 +499,7 @@ class EjecutorHerramientas:
             tool_name: Nombre de la herramienta
             tool_input: Parametros de entrada
             conversacion_id: ID de la conversacion
+            proyecto_id: ID del proyecto (desde contexto o parametros)
 
         Returns:
             Tupla con (resultado, accion_pendiente si requiere confirmacion)
@@ -452,6 +512,16 @@ class EjecutorHerramientas:
                 error=f"Herramienta '{tool_name}' no encontrada"
             ), None
 
+        # Determinar proyecto_id: prioridad a tool_input, luego contexto
+        proyecto_id_final = None
+        if "proyecto_id" in tool_input:
+            try:
+                proyecto_id_final = int(tool_input["proyecto_id"])
+            except (ValueError, TypeError):
+                pass
+        if proyecto_id_final is None and proyecto_id is not None:
+            proyecto_id_final = proyecto_id
+
         # Verificar si requiere confirmacion
         if herramienta.requiere_confirmacion:
             # Crear accion pendiente en lugar de ejecutar
@@ -459,6 +529,7 @@ class EjecutorHerramientas:
                 tool_name=tool_name,
                 parametros=tool_input,
                 conversacion_id=conversacion_id,
+                proyecto_id=proyecto_id_final,
             )
 
             # Generar descripcion legible
@@ -505,8 +576,16 @@ class EjecutorHerramientas:
         tool_name: str,
         parametros: Dict[str, Any],
         conversacion_id: UUID,
+        proyecto_id: Optional[int] = None,
     ) -> AccionPendiente:
-        """Crea una accion pendiente de confirmacion."""
+        """Crea una accion pendiente de confirmacion.
+
+        Args:
+            tool_name: Nombre de la herramienta
+            parametros: Parametros de la herramienta
+            conversacion_id: ID de la conversacion
+            proyecto_id: ID del proyecto asociado (opcional)
+        """
         # Mapear tool_name a TipoAccion
         tipo_mapping = {
             "crear_proyecto": "crear_proyecto",
@@ -517,6 +596,7 @@ class EjecutorHerramientas:
 
         accion = AccionPendiente(
             conversacion_id=conversacion_id,
+            proyecto_id=proyecto_id,
             tipo=tipo,
             parametros=parametros,
             descripcion=f"Accion: {tool_name}",
@@ -698,8 +778,28 @@ class AsistenteService:
             vista_actual=request.vista_actual or "dashboard",
         )
 
-        # Construir system prompt
-        system_prompt = SYSTEM_PROMPT_BASE + self.gestor_contexto.construir_prompt_contexto(contexto)
+        # Determinar si es contexto de proyecto o global
+        es_contexto_proyecto = (
+            request.proyecto_contexto_id is not None or
+            "proyecto" in (request.vista_actual or "").lower()
+        )
+
+        # Construir system prompt segun contexto
+        if es_contexto_proyecto and contexto.proyecto_id:
+            system_prompt = SYSTEM_PROMPT_PROYECTO.format(
+                proyecto_nombre=contexto.proyecto_nombre or "Sin nombre",
+                proyecto_id=contexto.proyecto_id,
+                proyecto_estado=contexto.proyecto_estado or "borrador",
+                tiene_geometria="Si" if contexto.proyecto_tiene_geometria else "No",
+                tiene_analisis="Si" if contexto.proyecto_tiene_analisis else "No",
+            ) + REGLAS_COMUNES
+            contexto_herramientas = ContextoHerramienta.PROYECTO
+        else:
+            system_prompt = SYSTEM_PROMPT_GLOBAL + REGLAS_COMUNES
+            contexto_herramientas = ContextoHerramienta.GLOBAL
+
+        # Agregar contexto adicional
+        system_prompt += self.gestor_contexto.construir_prompt_contexto(contexto)
 
         # Obtener historial
         historial = await self.gestor_memoria.obtener_historial(conversacion.id)
@@ -711,8 +811,8 @@ class AsistenteService:
                 "content": mensaje_sanitizado,
             })
 
-        # Obtener herramientas disponibles
-        tools = registro_herramientas.obtener_tools_anthropic()
+        # Obtener herramientas disponibles filtradas por contexto
+        tools = registro_herramientas.obtener_tools_anthropic(contexto=contexto_herramientas)
 
         # Ejecutar loop de tool use
         respuesta_final, tool_calls, fuentes, accion_pendiente = await self._ejecutar_loop_tool_use(
@@ -720,6 +820,7 @@ class AsistenteService:
             messages=historial,
             tools=tools,
             conversacion_id=conversacion.id,
+            proyecto_id=request.proyecto_contexto_id,
         )
 
         # Recargar contexto si se ejecutaron herramientas que modifican estado
@@ -824,6 +925,7 @@ class AsistenteService:
         messages: List[Dict],
         tools: List[Dict],
         conversacion_id: UUID,
+        proyecto_id: Optional[int] = None,
     ) -> Tuple[str, List[ToolCall], List[FuenteCitada], Optional[AccionPendiente]]:
         """
         Ejecuta el loop de tool use hasta obtener respuesta final.
@@ -833,6 +935,7 @@ class AsistenteService:
             messages: Historial de mensajes
             tools: Herramientas disponibles
             conversacion_id: ID de la conversacion
+            proyecto_id: ID del proyecto del contexto (opcional)
 
         Returns:
             Tupla con (respuesta_final, tool_calls, fuentes, accion_pendiente)
@@ -901,6 +1004,7 @@ class AsistenteService:
                     tool_name=tool_use.name,
                     tool_input=tool_use.input,
                     conversacion_id=conversacion_id,
+                    proyecto_id=proyecto_id,
                 )
 
                 if accion:

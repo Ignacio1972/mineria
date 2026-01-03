@@ -6,10 +6,8 @@ import { ref, computed } from 'vue'
 import { fichaService } from '@/services/ficha'
 import type {
   FichaProyecto,
-  FichaResumen,
   Caracteristica,
   CaracteristicaCreate,
-  CaracteristicaUpdate,
   CaracteristicasPorCategoria,
   CategoriaCaracteristica,
   PASProyecto,
@@ -20,7 +18,6 @@ import type {
   Diagnostico,
   ProgresoFicha,
   GuardarRespuestaAsistente,
-  CATEGORIA_LABELS,
 } from '@/types'
 
 export const useFichaStore = defineStore('ficha', () => {

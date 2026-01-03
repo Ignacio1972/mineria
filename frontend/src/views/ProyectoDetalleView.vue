@@ -13,6 +13,9 @@ import MapContainer from '@/components/map/MapContainer.vue'
 import AnalysisPanel from '@/components/analysis/AnalysisPanel.vue'
 import ChatAsistente from '@/components/asistente/ChatAsistente.vue'
 import FichaAcumulativa from '@/components/asistente/FichaAcumulativa.vue'
+import EstructuraEIA from '@/components/asistente/EstructuraEIA.vue'
+import RecopilacionCapitulo from '@/components/asistente/recopilacion/RecopilacionCapitulo.vue'
+import GeneracionEIA from '@/components/generacion/GeneracionEIA.vue'
 import { ESTADOS_PROYECTO } from '@/types'
 import type { DatosProyecto, GeometriaGeoJSON } from '@/types'
 
@@ -24,10 +27,10 @@ const asistenteStore = useAsistenteStore()
 const { ejecutarAnalisisRapido, ejecutarAnalisisCompleto, cargando: analizando } = useAnalysis()
 const { centrarEnGeometria } = useMap()
 
-const tabActivo = ref<'info' | 'mapa' | 'analisis' | 'documentos' | 'asistente' | 'ficha'>('info')
+const tabActivo = ref<'info' | 'mapa' | 'analisis' | 'documentos' | 'asistente' | 'ficha' | 'estructura' | 'recopilacion' | 'generacion'>('info')
 
 // Computed para determinar si el layout debe ser full-width (sin sidebar)
-const layoutFullWidth = computed(() => tabActivo.value === 'asistente' || tabActivo.value === 'ficha')
+const layoutFullWidth = computed(() => tabActivo.value === 'ficha')
 const guardando = ref(false)
 const formularioDatos = ref<DatosProyecto>({ nombre: '' })
 
@@ -432,6 +435,36 @@ async function onKmlSeleccionado(event: Event) {
               </svg>
               Ficha
             </button>
+            <button
+              class="tab"
+              :class="{ 'tab-active': tabActivo === 'estructura' }"
+              @click="tabActivo = 'estructura'"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              Estructura EIA
+            </button>
+            <button
+              class="tab"
+              :class="{ 'tab-active': tabActivo === 'recopilacion' }"
+              @click="tabActivo = 'recopilacion'"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              Recopilacion
+            </button>
+            <button
+              class="tab"
+              :class="{ 'tab-active': tabActivo === 'generacion' }"
+              @click="tabActivo = 'generacion'"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Generacion EIA
+            </button>
           </div>
 
           <!-- Tab: Informacion -->
@@ -519,22 +552,45 @@ async function onKmlSeleccionado(event: Event) {
             </div>
           </div>
 
-          <!-- Tab: Asistente (full-width, altura fija) -->
-          <div v-else-if="tabActivo === 'asistente'" class="w-full h-[calc(100vh-16rem)]">
-            <ChatAsistente
-              :proyecto-id="proyecto.id"
-              vista-actual="proyecto-detalle"
-            />
+          <!-- Tab: Asistente -->
+          <div v-else-if="tabActivo === 'asistente'" class="card bg-base-100 shadow-sm">
+            <div class="card-body p-0 h-[600px]">
+              <ChatAsistente
+                :proyecto-id="Number(proyecto.id)"
+                vista-actual="proyecto-detalle"
+              />
+            </div>
           </div>
 
           <!-- Tab: Ficha (full-width, altura adaptable) -->
           <div v-else-if="tabActivo === 'ficha'" class="w-full min-h-[60vh]">
             <div class="card bg-base-100 shadow-sm h-full w-full">
               <FichaAcumulativa
-                :proyecto-id="proyecto.id"
+                :proyecto-id="Number(proyecto.id)"
                 :colapsado="false"
                 class="h-full w-full"
               />
+            </div>
+          </div>
+
+          <!-- Tab: Estructura EIA -->
+          <div v-else-if="tabActivo === 'estructura'" class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+              <EstructuraEIA :proyecto-id="Number(proyecto.id)" />
+            </div>
+          </div>
+
+          <!-- Tab: Recopilacion EIA -->
+          <div v-else-if="tabActivo === 'recopilacion'" class="h-[70vh]">
+            <RecopilacionCapitulo :proyecto-id="Number(proyecto.id)" />
+          </div>
+
+          <!-- Tab: Generacion EIA -->
+          <div v-else-if="tabActivo === 'generacion'" class="h-[70vh]">
+            <div class="card bg-base-100 shadow-sm h-full">
+              <div class="card-body p-4">
+                <GeneracionEIA :proyecto-id="Number(proyecto.id)" />
+              </div>
             </div>
           </div>
         </div>

@@ -6,17 +6,10 @@ import { ref, computed } from 'vue'
 import { configIndustriaService } from '@/services/configIndustria'
 import type {
   TipoProyectoConSubtipos,
-  SubtipoProyecto,
   ConfigIndustriaCompleta,
   ConfigIndustriaResumen,
-  UmbralSEIA,
   EvaluarUmbralResponse,
-  PASPorTipo,
   PASAplicable,
-  NormativaPorTipo,
-  OAECAPorTipo,
-  ImpactoPorTipo,
-  AnexoPorTipo,
   ArbolPregunta,
   ProgresoPreguntas,
 } from '@/types'

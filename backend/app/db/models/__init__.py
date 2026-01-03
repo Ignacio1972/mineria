@@ -68,6 +68,43 @@ from .proyecto_extendido import (
     FaseConversacion,
     RolMensajeProyecto,
 )
+from .estructura_eia import (
+    CapituloEIA,
+    ComponenteLineaBase,
+    EstructuraEIAProyecto,
+    EstadoCapitulo,
+    EstadoPAS as EstadoPASEIA,
+    EstadoAnexo,
+    NivelComplejidad,
+)
+from .generacion_eia import (
+    DocumentoEIA,
+    VersionEIA,
+    ExportacionEIA,
+    ReglaValidacionSEA,
+    TemplateCapitulo,
+    ObservacionValidacion,
+    EstadoDocumento,
+    FormatoExportacion,
+    TipoValidacion,
+    Severidad,
+    EstadoObservacion,
+)
+from .proceso_evaluacion import (
+    ProcesoEvaluacion,
+    ICSARA,
+    Adenda,
+    EstadoEvaluacion,
+    ResultadoRCA,
+    EstadoICSARA,
+    EstadoAdenda,
+    ResultadoRevision,
+    TipoObservacion,
+    PrioridadObservacion,
+    EstadoObservacionICSARA,
+    OAECAS_MINERIA,
+    ESTADOS_TIMELINE,
+)
 
 __all__ = [
     # GIS
@@ -148,4 +185,38 @@ __all__ = [
     "EstadoConversacionProyecto",
     "FaseConversacion",
     "RolMensajeProyecto",
+    # Estructura EIA (Fase 2)
+    "CapituloEIA",
+    "ComponenteLineaBase",
+    "EstructuraEIAProyecto",
+    "EstadoCapitulo",
+    "EstadoPASEIA",
+    "EstadoAnexo",
+    "NivelComplejidad",
+    # Generación EIA (Fase 4)
+    "DocumentoEIA",
+    "VersionEIA",
+    "ExportacionEIA",
+    "ReglaValidacionSEA",
+    "TemplateCapitulo",
+    "ObservacionValidacion",
+    "EstadoDocumento",
+    "FormatoExportacion",
+    "TipoValidacion",
+    "Severidad",
+    "EstadoObservacion",
+    # Proceso Evaluación SEIA (ICSARA/Adendas)
+    "ProcesoEvaluacion",
+    "ICSARA",
+    "Adenda",
+    "EstadoEvaluacion",
+    "ResultadoRCA",
+    "EstadoICSARA",
+    "EstadoAdenda",
+    "ResultadoRevision",
+    "TipoObservacion",
+    "PrioridadObservacion",
+    "EstadoObservacionICSARA",
+    "OAECAS_MINERIA",
+    "ESTADOS_TIMELINE",
 ]

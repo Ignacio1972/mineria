@@ -21,6 +21,14 @@ from app.api.v1.endpoints import (
     config_industria,
     # Ficha Acumulativa del Proyecto
     ficha,
+    # Estructura EIA (Fase 2)
+    estructura_eia,
+    # Recopilacion Guiada (Fase 3)
+    recopilacion,
+    # Generacion EIA (Fase 4)
+    generacion,
+    # Proceso Evaluacion SEIA (Gestor ICSARA/Adendas)
+    proceso_evaluacion,
 )
 
 api_router = APIRouter()
@@ -137,4 +145,44 @@ api_router.include_router(
     ficha.router,
     prefix="/ficha",
     tags=["Ficha Acumulativa"],
+)
+
+# ============================================================================
+# Estructura EIA (Fase 2)
+# ============================================================================
+
+api_router.include_router(
+    estructura_eia.router,
+    prefix="/estructura-eia",
+    tags=["Estructura EIA"],
+)
+
+# ============================================================================
+# Recopilacion Guiada (Fase 3)
+# ============================================================================
+
+api_router.include_router(
+    recopilacion.router,
+    prefix="/recopilacion",
+    tags=["Recopilacion Guiada"],
+)
+
+# ============================================================================
+# Generacion EIA (Fase 4)
+# ============================================================================
+
+api_router.include_router(
+    generacion.router,
+    prefix="/generacion",
+    tags=["Generacion EIA"],
+)
+
+# ============================================================================
+# Proceso Evaluacion SEIA (Gestor ICSARA/Adendas)
+# ============================================================================
+
+api_router.include_router(
+    proceso_evaluacion.router,
+    prefix="/proceso-evaluacion",
+    tags=["Proceso Evaluacion SEIA"],
 )

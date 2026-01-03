@@ -3,11 +3,11 @@
  * Panel lateral que muestra la ficha acumulativa del proyecto.
  * Se actualiza en tiempo real cuando el asistente guarda datos.
  */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useFichaStore } from '@/stores/ficha'
 import type { CategoriaCaracteristica } from '@/types'
-import { CATEGORIA_LABELS, ESTADO_ART11_LABELS, VIA_SUGERIDA_LABELS } from '@/types/ficha'
+import { CATEGORIA_LABELS, VIA_SUGERIDA_LABELS } from '@/types/ficha'
 
 interface Props {
   proyectoId: number
@@ -26,15 +26,11 @@ const store = useFichaStore()
 const {
   ficha,
   caracteristicasPorCategoria,
-  pas,
   analisisArt11,
-  diagnostico,
-  progreso,
   cargando,
   error,
   porcentajeProgreso,
   viaSugerida,
-  confianzaDiagnostico,
   literalesGatillados,
   totalPAS,
   pasRequeridos,

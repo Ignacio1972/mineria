@@ -189,6 +189,12 @@ class AccionPendiente(Base):
         ForeignKey("asistente.mensajes.id", ondelete="SET NULL"),
         nullable=True
     )
+    proyecto_id = Column(
+        Integer,
+        ForeignKey("proyectos.proyectos.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
     tipo = Column(String(50), nullable=False, index=True)
     parametros = Column(JSONB, nullable=False)
     descripcion = Column(Text, nullable=False)
@@ -208,6 +214,7 @@ class AccionPendiente(Base):
     # Relaciones
     conversacion = relationship("Conversacion", back_populates="acciones")
     mensaje = relationship("Mensaje")
+    proyecto = relationship("Proyecto", foreign_keys=[proyecto_id])
 
     def __repr__(self):
         return f"<AccionPendiente {self.tipo} - {self.estado}>"

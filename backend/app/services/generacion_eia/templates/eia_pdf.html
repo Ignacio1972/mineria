@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ titulo }}</title>
+    <style>
+        /* ===== PAGE SETUP ===== */
+        @page {
+            size: {{ tamano_pagina }} {{ orientacion }};
+            margin: {{ margen_cm }}cm;
+            @top-center {
+                content: "{{ titulo_corto }}";
+                font-size: 9pt;
+                color: #666;
+            }
+            @bottom-center {
+                content: counter(page) " de " counter(pages);
+                font-size: 9pt;
+                color: #666;
+            }
+            @bottom-right {
+                content: "{{ empresa_consultora }}";
+                font-size: 8pt;
+                color: #888;
+            }
+        }
+
+        @page :first {
+            @top-center { content: none; }
+            @bottom-center { content: none; }
+            @bottom-right { content: none; }
+        }
+
+        /* ===== FONTS ===== */
+        body {
+            font-family: {{ fuente }}, Arial, sans-serif;
+            font-size: {{ tamano_fuente }}pt;
+            line-height: 1.5;
+            color: #333;
+        }
+
+        /* ===== COVER PAGE ===== */
+        .cover-page {
+            page-break-after: always;
+            text-align: center;
+            padding-top: 5cm;
+        }
+
+        .cover-logo {
+            max-width: 200px;
+            margin-bottom: 2cm;
+        }
+
+        .cover-title {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #1a365d;
+            margin-bottom: 0.5cm;
+        }
+
+        .cover-subtitle {
+            font-size: 18pt;
+            color: #2c5282;
+            margin-bottom: 2cm;
+        }
+
+        .cover-project {
+            font-size: 20pt;
+            font-weight: bold;
+            margin-bottom: 1cm;
+            color: #1a365d;
+        }
+
+        .cover-info {
+            font-size: 12pt;
+            margin-top: 3cm;
+        }
+
+        .cover-info p {
+            margin: 0.3cm 0;
+        }
+
+        .cover-date {
+            margin-top: 2cm;
+            font-size: 12pt;
+        }
+
+        /* ===== TABLE OF CONTENTS ===== */
+        .toc-page {
+            page-break-after: always;
+        }
+
+        .toc-title {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #1a365d;
+            margin-bottom: 1cm;
+            text-align: center;
+        }
+
+        .toc-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .toc-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.3cm 0;
+            border-bottom: 1px dotted #ccc;
+        }
+
+        .toc-item.level-1 {
+            font-weight: bold;
+            font-size: 12pt;
+        }
+
+        .toc-item.level-2 {
+            padding-left: 1cm;
+            font-size: 11pt;
+        }
+
+        .toc-item.level-3 {
+            padding-left: 2cm;
+            font-size: 10pt;
+            color: #555;
+        }
+
+        /* ===== HEADINGS ===== */
+        h1 {
+            font-size: 18pt;
+            color: #1a365d;
+            border-bottom: 2px solid #2c5282;
+            padding-bottom: 0.3cm;
+            margin-top: 1cm;
+            page-break-after: avoid;
+        }
+
+        h2 {
+            font-size: 14pt;
+            color: #2c5282;
+            margin-top: 0.8cm;
+            page-break-after: avoid;
+        }
+
+        h3 {
+            font-size: 12pt;
+            color: #3182ce;
+            margin-top: 0.5cm;
+            page-break-after: avoid;
+        }
+
+        h4 {
+            font-size: 11pt;
+            font-weight: bold;
+            margin-top: 0.3cm;
+            page-break-after: avoid;
+        }
+
+        /* ===== CHAPTER ===== */
+        .chapter {
+            page-break-before: always;
+        }
+
+        .chapter:first-of-type {
+            page-break-before: auto;
+        }
+
+        .chapter-number {
+            font-size: 14pt;
+            color: #666;
+            margin-bottom: 0.2cm;
+        }
+
+        /* ===== PARAGRAPHS ===== */
+        p {
+            text-align: justify;
+            margin: 0.4cm 0;
+        }
+
+        /* ===== LISTS ===== */
+        ul, ol {
+            margin: 0.4cm 0;
+            padding-left: 1cm;
+        }
+
+        li {
+            margin: 0.2cm 0;
+        }
+
+        /* ===== TABLES ===== */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0.5cm 0;
+            font-size: 10pt;
+            page-break-inside: avoid;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 0.2cm 0.3cm;
+            text-align: left;
+        }
+
+        th {
+            background-color: #2c5282;
+            color: white;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f7fafc;
+        }
+
+        .table-caption {
+            font-size: 10pt;
+            font-style: italic;
+            text-align: center;
+            margin-top: 0.2cm;
+            color: #666;
+        }
+
+        /* ===== FIGURES ===== */
+        figure {
+            margin: 0.5cm 0;
+            text-align: center;
+            page-break-inside: avoid;
+        }
+
+        figure img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        figcaption {
+            font-size: 10pt;
+            font-style: italic;
+            color: #666;
+            margin-top: 0.2cm;
+        }
+
+        /* ===== CODE BLOCKS ===== */
+        pre, code {
+            font-family: "Courier New", monospace;
+            font-size: 9pt;
+            background-color: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 3px;
+        }
+
+        pre {
+            padding: 0.3cm;
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }
+
+        code {
+            padding: 0.05cm 0.15cm;
+        }
+
+        /* ===== BLOCKQUOTES ===== */
+        blockquote {
+            margin: 0.5cm 0;
+            padding: 0.3cm 0.5cm;
+            border-left: 4px solid #2c5282;
+            background-color: #f7fafc;
+            font-style: italic;
+        }
+
+        /* ===== LEGAL REFERENCES ===== */
+        .legal-ref {
+            font-size: 10pt;
+            color: #555;
+            background-color: #edf2f7;
+            padding: 0.2cm 0.4cm;
+            border-radius: 3px;
+            margin: 0.2cm 0;
+        }
+
+        /* ===== SECTION NUMBERS ===== */
+        .section-number {
+            color: #2c5282;
+            font-weight: bold;
+        }
+
+        /* ===== METADATA BOX ===== */
+        .metadata-box {
+            background-color: #edf2f7;
+            border: 1px solid #cbd5e0;
+            padding: 0.5cm;
+            margin: 0.5cm 0;
+            border-radius: 5px;
+        }
+
+        .metadata-box h4 {
+            margin-top: 0;
+            color: #2c5282;
+        }
+
+        /* ===== WARNING/INFO BOXES ===== */
+        .info-box {
+            background-color: #ebf8ff;
+            border-left: 4px solid #3182ce;
+            padding: 0.3cm 0.5cm;
+            margin: 0.5cm 0;
+        }
+
+        .warning-box {
+            background-color: #fffaf0;
+            border-left: 4px solid #dd6b20;
+            padding: 0.3cm 0.5cm;
+            margin: 0.5cm 0;
+        }
+
+        /* ===== PAGE BREAKS ===== */
+        .page-break {
+            page-break-after: always;
+        }
+
+        .no-break {
+            page-break-inside: avoid;
+        }
+    </style>
+</head>
+<body>
+    {% if incluir_portada %}
+    <!-- COVER PAGE -->
+    <div class="cover-page">
+        {% if logo_empresa %}
+        <img src="{{ logo_empresa }}" alt="Logo" class="cover-logo">
+        {% endif %}
+
+        <div class="cover-title">ESTUDIO DE IMPACTO AMBIENTAL</div>
+        <div class="cover-subtitle">Conforme a la Ley 19.300 y D.S. 40/2012</div>
+
+        <div class="cover-project">{{ nombre_proyecto }}</div>
+
+        <div class="cover-info">
+            <p><strong>Titular:</strong> {{ titular }}</p>
+            <p><strong>Ubicación:</strong> {{ region }}, {{ comuna }}</p>
+            <p><strong>Tipo de Proyecto:</strong> {{ tipo_proyecto }}</p>
+            {% if empresa_consultora %}
+            <p><strong>Consultora:</strong> {{ empresa_consultora }}</p>
+            {% endif %}
+        </div>
+
+        <div class="cover-date">
+            <p><strong>Fecha:</strong> {{ fecha_elaboracion }}</p>
+            <p><strong>Versión:</strong> {{ version }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if incluir_indice %}
+    <!-- TABLE OF CONTENTS -->
+    <div class="toc-page">
+        <div class="toc-title">ÍNDICE DE CONTENIDOS</div>
+        <ul class="toc-list">
+            {% for item in indice %}
+            <li class="toc-item level-{{ item.nivel }}">
+                <span>{{ item.numero }} {{ item.titulo }}</span>
+                <span>{{ item.pagina }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- CONTENT -->
+    {% for capitulo in capitulos %}
+    <div class="chapter" id="capitulo-{{ capitulo.numero }}">
+        <div class="chapter-number">Capítulo {{ capitulo.numero }}</div>
+        <h1>{{ capitulo.titulo }}</h1>
+
+        {{ capitulo.contenido_html | safe }}
+    </div>
+    {% endfor %}
+
+    {% if anexos %}
+    <!-- ANNEXES -->
+    <div class="chapter">
+        <h1>ANEXOS</h1>
+        {% for anexo in anexos %}
+        <h2>Anexo {{ anexo.numero }}: {{ anexo.titulo }}</h2>
+        {{ anexo.contenido_html | safe }}
+        {% endfor %}
+    </div>
+    {% endif %}
+</body>
+</html>

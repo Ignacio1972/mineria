@@ -1,0 +1,751 @@
+ Plan de Implementación: Fase 2 - Estructuración EIA
+
+     Resumen Ejecutivo
+
+     Implementar la Fase 2 del sistema de asistente IA que genera la 
+     estructura del EIA con capítulos, PAS y anexos según el tipo de
+     proyecto.
+
+     Funcionalidades a implementar:
+     - F2.1: Template EIA por industria (11 capítulos adaptados)
+     - F2.2: Lista de PAS requeridos con estado de tramitación
+     - F2.3: Lista de anexos técnicos requeridos
+     - F2.4: Plan de línea base por componente
+     - F2.5: Estimación de alcance y complejidad
+
+     Decisiones de diseño:
+     - Industrias iniciales: Solo Minería (usando TEMPLATE_EIA_MINERIA.md 
+     existente)
+     - Generación: Automática cuando la prefactibilidad esté completa
+     - UI: Tab separado "Estructura EIA" en ProyectoDetalleView
+
+     ---
+     Arquitectura Propuesta
+
+     ┌──────────────────────────────────────────────────────────────────────
+     ───────┐
+     │                           FASE 2: ESTRUCTURACIÓN EIA                 
+             │
+     ├──────────────────────────────────────────────────────────────────────
+     ───────┤
+     │                                                                      
+             │
+     │  BACKEND                                                             
+             │
+     │  ┌───────────────────────────────────────────────────────────────────
+     ───┐   │
+     │  │ Nuevas Tablas (asistente_config)                                  
+         │   │
+     │  │ • capitulos_eia (11 capítulos por tipo)                           
+         │   │
+     │  │ • componentes_linea_base (por capítulo/tipo)                      
+         │   │
+     │  │ • estructura_eia_proyecto (instancia por proyecto)                
+         │   │
+     │  └───────────────────────────────────────────────────────────────────
+     ───┘   │
+     │                                                                      
+             │
+     │  ┌───────────────────────────────────────────────────────────────────
+     ───┐   │
+     │  │ Nuevo Servicio: EstructuraEIAService                              
+         │   │
+     │  │ • generar_estructura(proyecto_id) → EstructuraEIA                 
+         │   │
+     │  │ • get_capitulos(tipo) → Capitulo[]                                
+         │   │
+     │  │ • get_plan_linea_base(tipo) → ComponenteLineaBase[]               
+         │   │
+     │  │ • estimar_complejidad(proyecto_id) → EstimacionComplejidad        
+         │   │
+     │  └───────────────────────────────────────────────────────────────────
+     ───┘   │
+     │                                                                      
+             │
+     │  ┌───────────────────────────────────────────────────────────────────
+     ───┐   │
+     │  │ Nuevas Herramientas del Asistente                                 
+         │   │
+     │  │ • generar_estructura_eia (PROYECTO, accion)                       
+         │   │
+     │  │ • consultar_capitulos_eia (PROYECTO, consulta)                    
+         │   │
+     │  │ • consultar_plan_linea_base (PROYECTO, consulta)                  
+         │   │
+     │  │ • estimar_complejidad_proyecto (PROYECTO, consulta)               
+         │   │
+     │  └───────────────────────────────────────────────────────────────────
+     ───┘   │
+     │                                                                      
+             │
+     │  FRONTEND                                                            
+             │
+     │  ┌───────────────────────────────────────────────────────────────────
+     ───┐   │
+     │  │ Nuevo Componente: EstructuraEIA.vue                               
+         │   │
+     │  │ • Vista de capítulos con progreso                                 
+         │   │
+     │  │ • Lista de PAS con estados                                        
+         │   │
+     │  │ • Lista de anexos requeridos                                      
+         │   │
+     │  │ • Plan de línea base                                              
+         │   │
+     │  │ • Estimación de complejidad                                       
+         │   │
+     │  └───────────────────────────────────────────────────────────────────
+     ───┘   │
+     │                                                                      
+             │
+     └──────────────────────────────────────────────────────────────────────
+     ───────┘
+
+     ---
+     Paso 1: Modelo de Datos
+
+     1.1 Nueva migración SQL
+
+     Archivo: backend/migrations/005_estructura_eia.sql
+
+     -- Capítulos del EIA por tipo de proyecto
+     CREATE TABLE asistente_config.capitulos_eia (
+         id SERIAL PRIMARY KEY,
+         tipo_proyecto_id INTEGER REFERENCES 
+     asistente_config.tipos_proyecto(id),
+         numero INTEGER NOT NULL,  -- 1-11
+         titulo VARCHAR(200) NOT NULL,
+         descripcion TEXT,
+         contenido_requerido JSONB,  -- Lista de secciones/subsecciones
+         es_obligatorio BOOLEAN DEFAULT true,
+         orden INTEGER NOT NULL,
+         UNIQUE(tipo_proyecto_id, numero)
+     );
+
+     -- Componentes de línea base por capítulo
+     CREATE TABLE asistente_config.componentes_linea_base (
+         id SERIAL PRIMARY KEY,
+         tipo_proyecto_id INTEGER REFERENCES 
+     asistente_config.tipos_proyecto(id),
+         capitulo_id INTEGER REFERENCES asistente_config.capitulos_eia(id),
+         nombre VARCHAR(100) NOT NULL,
+         descripcion TEXT,
+         metodologia TEXT,
+         variables_monitorear JSONB,  -- Variables a medir
+         estudios_requeridos JSONB,   -- Estudios técnicos necesarios
+         duracion_estimada_dias INTEGER,
+         es_obligatorio BOOLEAN DEFAULT true,
+         orden INTEGER
+     );
+
+     -- Estructura EIA generada por proyecto (instancia)
+     CREATE TABLE proyectos.estructura_eia (
+         id SERIAL PRIMARY KEY,
+         proyecto_id INTEGER REFERENCES proyectos.proyectos(id) ON DELETE 
+     CASCADE,
+         version INTEGER DEFAULT 1,
+         capitulos JSONB NOT NULL,        -- Lista de capítulos con estado
+         pas_requeridos JSONB NOT NULL,   -- PAS con estado de tramitación
+         anexos_requeridos JSONB NOT NULL, -- Anexos técnicos
+         plan_linea_base JSONB,           -- Componentes de línea base
+         estimacion_complejidad JSONB,    -- Alcance y complejidad
+         created_at TIMESTAMPTZ DEFAULT NOW(),
+         updated_at TIMESTAMPTZ DEFAULT NOW(),
+         created_by UUID,
+         UNIQUE(proyecto_id, version)
+     );
+
+     -- Índices
+     CREATE INDEX idx_capitulos_tipo ON 
+     asistente_config.capitulos_eia(tipo_proyecto_id);
+     CREATE INDEX idx_componentes_tipo ON 
+     asistente_config.componentes_linea_base(tipo_proyecto_id);
+     CREATE INDEX idx_estructura_proyecto ON 
+     proyectos.estructura_eia(proyecto_id);
+
+     1.2 Modelos SQLAlchemy
+
+     Archivo: backend/app/db/models/estructura_eia.py
+
+     Crear modelos para:
+     - CapituloEIA
+     - ComponenteLineaBase
+     - EstructuraEIAProyecto
+
+     ---
+     Paso 2: Schemas Pydantic
+
+     Archivo: backend/app/schemas/estructura_eia.py
+
+     # Schemas principales a crear:
+
+     class CapituloEIABase(BaseModel):
+         numero: int
+         titulo: str
+         descripcion: Optional[str]
+         contenido_requerido: List[str]
+         es_obligatorio: bool
+
+     class CapituloConEstado(CapituloEIABase):
+         estado: Literal["pendiente", "en_progreso", "completado"]
+         progreso_porcentaje: int
+         secciones_completadas: int
+         secciones_totales: int
+
+     class PASConEstado(BaseModel):
+         articulo: int
+         nombre: str
+         organismo: str
+         obligatoriedad: Literal["obligatorio", "frecuente", "caso_a_caso"]
+         estado: Literal["identificado", "requerido", "en_tramite", 
+     "aprobado", "no_aplica"]
+         condiciones: Optional[Dict]
+         fecha_limite: Optional[datetime]
+
+     class AnexoRequerido(BaseModel):
+         codigo: str
+         nombre: str
+         descripcion: str
+         responsable: str
+         obligatorio: bool
+         estado: Literal["pendiente", "en_elaboracion", "completado"]
+         condicion_activacion: Optional[Dict]
+
+     class ComponenteLineaBaseResponse(BaseModel):
+         nombre: str
+         descripcion: str
+         metodologia: str
+         variables: List[str]
+         estudios_requeridos: List[str]
+         duracion_estimada_dias: int
+         es_obligatorio: bool
+
+     class EstimacionComplejidad(BaseModel):
+         nivel: Literal["baja", "media", "alta", "muy_alta"]
+         puntaje: int  # 0-100
+         factores: List[Dict]  # Factores que afectan complejidad
+         tiempo_estimado_meses: int
+         recursos_sugeridos: Dict
+         riesgos_principales: List[str]
+
+     class EstructuraEIAResponse(BaseModel):
+         proyecto_id: int
+         version: int
+         capitulos: List[CapituloConEstado]
+         pas_requeridos: List[PASConEstado]
+         anexos_requeridos: List[AnexoRequerido]
+         plan_linea_base: List[ComponenteLineaBaseResponse]
+         estimacion: EstimacionComplejidad
+         created_at: datetime
+
+     ---
+     Paso 3: Servicio EstructuraEIA
+
+     Archivo: backend/app/services/estructura_eia/service.py
+
+     class EstructuraEIAService:
+         """Servicio para generar y gestionar estructura del EIA."""
+
+         async def generar_estructura(
+             self,
+             proyecto_id: int,
+             forzar_regenerar: bool = False
+         ) -> EstructuraEIAResponse:
+             """
+             Genera la estructura completa del EIA para un proyecto.
+
+             1. Obtiene tipo/subtipo del proyecto
+             2. Carga capítulos configurados para ese tipo
+             3. Identifica PAS aplicables según características
+             4. Identifica anexos aplicables
+             5. Genera plan de línea base
+             6. Estima complejidad
+             7. Persiste en BD
+             """
+
+         async def get_capitulos_tipo(
+             self,
+             tipo_codigo: str,
+             subtipo_codigo: Optional[str] = None
+         ) -> List[CapituloEIA]:
+             """Obtiene capítulos configurados para un tipo."""
+
+         async def get_plan_linea_base(
+             self,
+             tipo_codigo: str,
+             caracteristicas: Dict
+         ) -> List[ComponenteLineaBase]:
+             """Genera plan de línea base según tipo y características."""
+
+         async def estimar_complejidad(
+             self,
+             proyecto_id: int
+         ) -> EstimacionComplejidad:
+             """
+             Estima complejidad basándose en:
+             - Número de triggers Art. 11 activados
+             - Superficie del proyecto
+             - Ubicación (áreas sensibles)
+             - Número de PAS requeridos
+             - Componentes ambientales afectados
+             """
+
+         async def actualizar_estado_capitulo(
+             self,
+             proyecto_id: int,
+             capitulo_numero: int,
+             estado: str,
+             progreso: int
+         ) -> EstructuraEIAProyecto:
+             """Actualiza estado de un capítulo."""
+
+         async def actualizar_estado_pas(
+             self,
+             proyecto_id: int,
+             articulo: int,
+             estado: str
+         ) -> EstructuraEIAProyecto:
+             """Actualiza estado de tramitación de un PAS."""
+
+     ---
+     Paso 4: Herramientas del Asistente
+
+     Archivo: backend/app/services/asistente/tools/estructura_eia.py
+
+     4.1 GenerarEstructuraEIA (Acción)
+
+     @registro_herramientas.registrar
+     class GenerarEstructuraEIA(Herramienta):
+         """Genera la estructura del EIA para el proyecto actual."""
+
+         nombre = "generar_estructura_eia"
+         descripcion = """Genera la estructura completa del EIA para el 
+     proyecto.
+         Usa esta herramienta cuando:
+         - El usuario quiera ver la estructura del EIA
+         - Se haya completado la recopilación de información básica
+         - Se quiera planificar el desarrollo del estudio
+         - El diagnóstico indique que el proyecto requiere EIA (vía sugerida
+      = EIA)
+
+         IMPORTANTE: Cuando detectes que la prefactibilidad está completa
+         (via_sugerida=EIA y progreso>=70%), SUGIERE PROACTIVAMENTE generar
+         la estructura del EIA.
+
+         Genera: 11 capítulos adaptados, lista de PAS, anexos requeridos,
+         plan de línea base y estimación de complejidad."""
+
+         categoria = CategoriaHerramienta.ACCION
+         contexto_requerido = ContextoHerramienta.PROYECTO
+         requiere_confirmacion = True  # Persiste datos
+
+     4.1.1 Detección Automática (en SYSTEM_PROMPT_PROYECTO)
+
+     Agregar al system prompt del asistente en contexto de proyecto:
+
+     5. GENERACIÓN DE ESTRUCTURA EIA (FASE 2)
+        - Cuando detectes que el diagnóstico indica via_sugerida="EIA"
+        - Y el progreso de la ficha sea >= 70%
+        - SUGIERE PROACTIVAMENTE generar la estructura del EIA
+        - Usa 'generar_estructura_eia' para crear la estructura
+        - Después muestra resumen de capítulos, PAS y anexos requeridos
+
+     4.2 ConsultarCapitulosEIA (Consulta)
+
+     @registro_herramientas.registrar
+     class ConsultarCapitulosEIA(Herramienta):
+         """Consulta los capítulos del EIA y su estado."""
+
+         nombre = "consultar_capitulos_eia"
+         descripcion = """Consulta los capítulos del EIA generados para el 
+     proyecto.
+         Permite ver estado de cada capítulo, contenido requerido y 
+     progreso."""
+
+         contexto_requerido = ContextoHerramienta.PROYECTO
+         requiere_confirmacion = False
+
+     4.3 ConsultarPlanLineaBase (Consulta)
+
+     @registro_herramientas.registrar
+     class ConsultarPlanLineaBase(Herramienta):
+         """Consulta el plan de línea base del proyecto."""
+
+         nombre = "consultar_plan_linea_base"
+         descripcion = """Consulta el plan de línea base generado.
+         Muestra componentes ambientales a caracterizar, metodologías,
+         variables a monitorear y estudios técnicos requeridos."""
+
+     4.4 EstimarComplejidadProyecto (Consulta)
+
+     @registro_herramientas.registrar
+     class EstimarComplejidadProyecto(Herramienta):
+         """Estima la complejidad y alcance del proyecto."""
+
+         nombre = "estimar_complejidad_proyecto"
+         descripcion = """Estima el nivel de complejidad del EIA.
+         Considera triggers Art. 11, ubicación, PAS requeridos, etc.
+         Retorna: nivel, tiempo estimado, recursos sugeridos, riesgos."""
+
+     ---
+     Paso 5: Endpoints API
+
+     Archivo: backend/app/api/v1/endpoints/estructura_eia.py
+
+     router = APIRouter(prefix="/estructura-eia", tags=["Estructura EIA"])
+
+     @router.post("/generar/{proyecto_id}")
+     async def generar_estructura(proyecto_id: int) -> EstructuraEIAResponse
+
+     @router.get("/proyecto/{proyecto_id}")
+     async def get_estructura(proyecto_id: int) -> EstructuraEIAResponse
+
+     @router.get("/proyecto/{proyecto_id}/capitulos")
+     async def get_capitulos(proyecto_id: int) -> List[CapituloConEstado]
+
+     @router.patch("/proyecto/{proyecto_id}/capitulo/{numero}")
+     async def actualizar_capitulo(proyecto_id: int, numero: int, estado: 
+     str)
+
+     @router.get("/proyecto/{proyecto_id}/pas")
+     async def get_pas(proyecto_id: int) -> List[PASConEstado]
+
+     @router.patch("/proyecto/{proyecto_id}/pas/{articulo}")
+     async def actualizar_pas(proyecto_id: int, articulo: int, estado: str)
+
+     @router.get("/proyecto/{proyecto_id}/anexos")
+     async def get_anexos(proyecto_id: int) -> List[AnexoRequerido]
+
+     @router.get("/proyecto/{proyecto_id}/linea-base")
+     async def get_linea_base(proyecto_id: int) -> 
+     List[ComponenteLineaBaseResponse]
+
+     @router.get("/proyecto/{proyecto_id}/complejidad")
+     async def get_complejidad(proyecto_id: int) -> EstimacionComplejidad
+
+     @router.get("/tipos/{tipo_codigo}/capitulos")
+     async def get_capitulos_tipo(tipo_codigo: str) -> List[CapituloEIA]
+
+     ---
+     Paso 6: Datos Iniciales
+
+     Archivo: backend/migrations/005_estructura_eia_data.sql
+
+     Fuente: Extraer datos de 
+     /var/www/mineria/docs/asistente/TEMPLATE_EIA_MINERIA.md
+
+     6.1 Capítulos EIA para Minería (11 capítulos según DS 40)
+
+     Los 11 capítulos según Art. 18 DS 40 (del template existente):
+
+     | #   | Título                                     | Secciones         
+
+                                                  |
+     |-----|--------------------------------------------|-------------------
+     -----------------------------------------------------------------------
+     ---------------------------------------------|
+     | 1   | Descripción del Proyecto                   | Antecedentes, 
+     Localización, Partes/Obras/Acciones, Fases, Insumos, Emisiones, Mano de
+      obra, Cronograma                                |
+     | 2   | Área de Influencia                         | Criterios de 
+     delimitación por componente, Cartografía
+                                                       |
+     | 3   | Línea de Base                              | Medio físico 
+     (clima, aire, ruido, geología, hidro), Medio biótico (flora, fauna),
+     Medio humano, Patrimonio, Paisaje, Áreas protegidas |
+     | 4   | Predicción y Evaluación de Impactos        | Metodología, 
+     Matriz de impactos, Evaluación Art. 11
+                                                       |
+     | 5   | Plan de Medidas                            | Jerarquía 
+     mitigación, Medidas por componente
+                                                          |
+     | 6   | Plan de Contingencias                      | Identificación 
+     riesgos, Contingencias típicas, Organización emergencias
+                                                     |
+     | 7   | Plan de Seguimiento                        | Variables por 
+     componente, Puntos de control, Frecuencias
+                                                      |
+     | 8   | Normativa Ambiental                        | Normas de calidad,
+      Normas de emisión, Otras normativas
+                                                  |
+     | 9   | Permisos Ambientales Sectoriales           | PAS aplicables con
+      requisitos
+                                                  |
+     | 10  | Relación con Políticas, Planes y Programas | IPT, ERD, PRC, 
+     PLADECO
+                                                     |
+     | 11  | Compromisos Ambientales Voluntarios        | Programas, Fondos,
+      Capacitación
+                                                  |
+
+     -- Los 11 capítulos para minería (extraídos de TEMPLATE_EIA_MINERIA.md)
+     INSERT INTO asistente_config.capitulos_eia
+     (tipo_proyecto_id, numero, titulo, descripcion, contenido_requerido, 
+     es_obligatorio, orden)
+     SELECT tp.id, c.numero, c.titulo, c.descripcion, c.contenido, 
+     c.obligatorio, c.numero
+     FROM asistente_config.tipos_proyecto tp,
+     (VALUES
+       (1, 'Descripción del Proyecto', 'Antecedentes generales, 
+     localización, partes, obras y acciones',
+        '["Antecedentes generales", "Localización", "Descripción de partes y
+      obras", "Fases del proyecto", "Insumos y servicios", "Emisiones y 
+     residuos", "Mano de obra", "Cronograma"]', true),
+       (2, 'Área de Influencia', 'Determinación del AI para cada elemento 
+     ambiental',
+        '["Criterios de delimitación", "AI por componente ambiental", 
+     "Cartografía del AI"]', true),
+       (3, 'Línea de Base', 'Descripción del estado actual del medio 
+     ambiente',
+        '["Medio físico", "Medio biótico", "Medio humano", "Patrimonio 
+     cultural", "Paisaje", "Áreas protegidas", "Uso del territorio"]', 
+     true),
+       (4, 'Predicción y Evaluación de Impactos', 'Metodología y evaluación 
+     de efectos Art. 11',
+        '["Metodología de evaluación", "Matriz de impactos", "Evaluación 
+     efectos Art. 11"]', true),
+       (5, 'Plan de Medidas', 'Medidas de mitigación, reparación y 
+     compensación',
+        '["Jerarquía de mitigación", "Medidas por componente", "Formato 
+     estándar por medida"]', true),
+       (6, 'Plan de Contingencias y Emergencias', 'Prevención y respuesta a 
+     contingencias',
+        '["Identificación de riesgos", "Contingencias típicas", 
+     "Organización para emergencias"]', true),
+       (7, 'Plan de Seguimiento Ambiental', 'Monitoreo de variables 
+     comprometidas',
+        '["Variables a monitorear", "Puntos de control", "Frecuencias", 
+     "Informes"]', true),
+       (8, 'Normativa Ambiental Aplicable', 'Normas de calidad y emisión',
+        '["Normas de calidad ambiental", "Normas de emisión", "Otras 
+     normativas sectoriales"]', true),
+       (9, 'Permisos Ambientales Sectoriales', 'PAS aplicables al proyecto',
+        '["Identificación de PAS", "Requisitos por PAS", "Antecedentes 
+     técnicos"]', true),
+       (10, 'Relación con Políticas, Planes y Programas', 'Compatibilidad 
+     con IPT',
+        '["Instrumentos de planificación", "Análisis de compatibilidad"]', 
+     true),
+       (11, 'Compromisos Ambientales Voluntarios', 'Compromisos adicionales 
+     del titular',
+        '["Programas de desarrollo local", "Proyectos de conservación"]', 
+     false)
+     ) AS c(numero, titulo, descripcion, contenido, obligatorio)
+     WHERE tp.codigo = 'mineria';
+
+     6.2 Componentes de Línea Base para Minería
+
+     INSERT INTO asistente_config.componentes_linea_base
+     (tipo_proyecto_id, capitulo_id, nombre, descripcion, metodologia, 
+     variables_monitorear, estudios_requeridos, duracion_estimada_dias)
+     VALUES
+     (1, 3, 'Clima y Meteorología', 'Caracterización climática del área', 
+     'Análisis de datos DGA/DMC + estación propia',
+      '["Temperatura", "Precipitación", "Viento", "Humedad", 
+     "Evaporación"]',
+      '["Informe climatológico", "Rosa de vientos"]', 30),
+     (1, 3, 'Calidad del Aire', 'Caracterización de calidad del aire', 
+     'Campañas de monitoreo según D.S. 61',
+      '["MP10", "MP2.5", "SO2", "NOx", "CO"]',
+      '["Informe de calidad del aire", "Modelación de dispersión"]', 90),
+     -- ... más componentes
+
+     ---
+     Paso 7: Frontend
+
+     7.1 Nuevo Store
+
+     Archivo: frontend/src/stores/estructuraEia.ts
+
+     export const useEstructuraEiaStore = defineStore('estructuraEia', () =>
+      {
+       // Estado
+       const estructura = ref<EstructuraEIA | null>(null)
+       const cargando = ref(false)
+
+       // Computed
+       const capitulos = computed(() => estructura.value?.capitulos ?? [])
+       const pasRequeridos = computed(() => estructura.value?.pas_requeridos
+      ?? [])
+       const anexos = computed(() => estructura.value?.anexos_requeridos ?? 
+     [])
+       const planLineaBase = computed(() => 
+     estructura.value?.plan_linea_base ?? [])
+       const estimacion = computed(() => estructura.value?.estimacion)
+
+       const progresoGeneral = computed(() => {
+         if (!capitulos.value.length) return 0
+         const completados = capitulos.value.filter(c => c.estado === 
+     'completado').length
+         return Math.round((completados / capitulos.value.length) * 100)
+       })
+
+       // Acciones
+       async function generarEstructura(proyectoId: number)
+       async function cargarEstructura(proyectoId: number)
+       async function actualizarCapitulo(proyectoId: number, numero: number,
+      estado: string)
+       async function actualizarPAS(proyectoId: number, articulo: number, 
+     estado: string)
+     })
+
+     7.2 Componente Principal
+
+     Archivo: frontend/src/components/asistente/EstructuraEIA.vue
+
+     <template>
+       <div class="estructura-eia">
+         <!-- Header con estimación de complejidad -->
+         <div class="card bg-base-100 shadow mb-4">
+           <div class="card-body">
+             <h2 class="card-title">Estructura del EIA</h2>
+             <ComplejidadBadge :estimacion="estimacion" />
+             <ProgresoGeneral :porcentaje="progresoGeneral" />
+           </div>
+         </div>
+
+         <!-- Tabs: Capítulos | PAS | Anexos | Línea Base -->
+         <div class="tabs tabs-boxed mb-4">
+           <a class="tab" :class="{ 'tab-active': tabActiva === 'capitulos' 
+     }">
+             Capítulos ({{ capitulos.length }})
+           </a>
+           <a class="tab" :class="{ 'tab-active': tabActiva === 'pas' }">
+             PAS ({{ pasRequeridos.length }})
+           </a>
+           <a class="tab" :class="{ 'tab-active': tabActiva === 'anexos' }">
+             Anexos ({{ anexos.length }})
+           </a>
+           <a class="tab" :class="{ 'tab-active': tabActiva === 'linea-base'
+      }">
+             Línea Base
+           </a>
+         </div>
+
+         <!-- Contenido según tab -->
+         <CapitulosList v-if="tabActiva === 'capitulos'" 
+     :capitulos="capitulos" />
+         <PASList v-if="tabActiva === 'pas'" :pas="pasRequeridos" />
+         <AnexosList v-if="tabActiva === 'anexos'" :anexos="anexos" />
+         <LineaBaseList v-if="tabActiva === 'linea-base'" 
+     :componentes="planLineaBase" />
+       </div>
+     </template>
+
+     7.3 Subcomponentes
+
+     - CapitulosList.vue - Lista de capítulos con estados y progreso
+     - PASList.vue - Lista de PAS con estados de tramitación
+     - AnexosList.vue - Lista de anexos técnicos requeridos
+     - LineaBaseList.vue - Plan de línea base por componente
+     - ComplejidadBadge.vue - Badge visual de complejidad
+     - ProgresoGeneral.vue - Barra de progreso general
+
+     ---
+     Paso 8: Integración en ProyectoDetalleView
+
+     Agregar nuevo tab "Estructura EIA" en ProyectoDetalleView.vue:
+
+     <!-- Nuevo tab -->
+     <a class="tab" @click="tabActual = 'estructura'">
+       <DocumentTextIcon class="w-4 h-4 mr-1" />
+       Estructura EIA
+     </a>
+
+     <!-- Contenido del tab -->
+     <EstructuraEIA
+       v-if="tabActual === 'estructura'"
+       :proyecto-id="proyectoId"
+     />
+
+     ---
+     Archivos a Crear/Modificar
+
+     Nuevos archivos:
+
+     1. backend/migrations/005_estructura_eia.sql
+     2. backend/app/db/models/estructura_eia.py
+     3. backend/app/schemas/estructura_eia.py
+     4. backend/app/services/estructura_eia/service.py
+     5. backend/app/services/estructura_eia/__init__.py
+     6. backend/app/services/asistente/tools/estructura_eia.py
+     7. backend/app/api/v1/endpoints/estructura_eia.py
+     8. frontend/src/stores/estructuraEia.ts
+     9. frontend/src/components/asistente/EstructuraEIA.vue
+     10. frontend/src/components/asistente/estructura/CapitulosList.vue
+     11. frontend/src/components/asistente/estructura/PASList.vue
+     12. frontend/src/components/asistente/estructura/AnexosList.vue
+     13. frontend/src/components/asistente/estructura/LineaBaseList.vue
+     14. frontend/src/types/estructuraEia.ts
+
+     Archivos a modificar:
+
+     1. backend/app/services/asistente/tools/__init__.py - Registrar nuevas 
+     tools
+     2. backend/app/api/v1/__init__.py - Registrar router
+     3. frontend/src/views/ProyectoDetalleView.vue - Agregar tab
+     4. frontend/src/services/api.ts - Agregar endpoints
+
+     ---
+     Orden de Implementación
+
+     1. Migración SQL - Crear tablas y datos iniciales
+     2. Modelos SQLAlchemy - Mapear tablas
+     3. Schemas Pydantic - Definir tipos de entrada/salida
+     4. Servicio EstructuraEIA - Lógica de negocio
+     5. Herramientas Asistente - Integrar con IA
+     6. Endpoints API - Exponer funcionalidad
+     7. Store Frontend - State management
+     8. Componentes Vue - UI
+     9. Integración - Tab en ProyectoDetalleView
+     10. Tests - Verificar funcionalidad
+
+     ---
+     Criterios de Éxito
+
+     - El asistente puede generar estructura EIA cuando se solicita
+     - El asistente SUGIERE PROACTIVAMENTE generar estructura cuando 
+     prefactibilidad >= 70% y via=EIA
+     - Se muestran 11 capítulos adaptados al tipo de proyecto (minería)
+     - Lista de PAS con estados de tramitación editables
+     - Lista de anexos técnicos según características del proyecto
+     - Plan de línea base con componentes y metodologías
+     - Estimación de complejidad con nivel, tiempo y recursos
+     - Progreso visual por capítulo y general
+     - Persistencia en BD para tracking de progreso
+     - Tab "Estructura EIA" visible en ProyectoDetalleView
+
+     ---
+     Archivos Principales a Modificar
+
+     | Archivo                                          | Cambio            
+                                             |
+     |--------------------------------------------------|-------------------
+     ----------------------------------------|
+     | backend/app/services/asistente/service.py        | Agregar 
+     instrucciones de Fase 2 al SYSTEM_PROMPT_PROYECTO |
+     | backend/app/services/asistente/tools/__init__.py | Importar y 
+     registrar nuevas herramientas                  |
+     | backend/app/api/v1/__init__.py                   | Registrar router 
+     de estructura_eia                        |
+     | frontend/src/views/ProyectoDetalleView.vue       | Agregar tab 
+     "Estructura EIA"                              |
+     | frontend/src/services/api.ts                     | Agregar endpoints 
+     de estructura EIA                       |
+
+     ---
+     Estimación de Esfuerzo
+
+     | Componente             | Complejidad | Archivos     |
+     |------------------------|-------------|--------------|
+     | Migración SQL + Datos  | Media       | 2            |
+     | Modelos + Schemas      | Baja        | 2            |
+     | Servicio EstructuraEIA | Alta        | 2            |
+     | Herramientas Asistente | Media       | 1            |
+     | Endpoints API          | Baja        | 1            |
+     | Frontend Store         | Media       | 1            |
+     | Componentes Vue        | Alta        | 6            |
+     | Integración            | Baja        | 3            |
+     | Total                  |             | ~18 archivos |
+
+

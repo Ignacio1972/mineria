@@ -38,6 +38,20 @@ class Proyecto(Base):
         index=True
     )
 
+    # Relacion con tipo/subtipo de proyecto (multi-industria)
+    tipo_proyecto_id = Column(
+        Integer,
+        ForeignKey("asistente_config.tipos_proyecto.id"),
+        nullable=True,
+        index=True
+    )
+    subtipo_proyecto_id = Column(
+        Integer,
+        ForeignKey("asistente_config.subtipos_proyecto.id"),
+        nullable=True,
+        index=True
+    )
+
     # Estado del proyecto
     estado = Column(String(20), default="borrador", index=True)
     porcentaje_completado = Column(Integer, default=0)
@@ -102,6 +116,12 @@ class Proyecto(Base):
     )
     documentos = relationship(
         "DocumentoProyecto",
+        back_populates="proyecto",
+        lazy="dynamic",
+        cascade="all, delete-orphan"
+    )
+    documentos_eia = relationship(
+        "DocumentoEIA",
         back_populates="proyecto",
         lazy="dynamic",
         cascade="all, delete-orphan"

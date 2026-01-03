@@ -13,6 +13,7 @@ from .base import (
     Herramienta,
     ResultadoHerramienta,
     CategoriaHerramienta,
+    ContextoHerramienta,
     PermisoHerramienta,
     registro_herramientas,
 )
@@ -32,6 +33,7 @@ Usa esta herramienta cuando el usuario pregunte sobre un proyecto especifico:
 - Ubicacion
 - Parametros tecnicos (superficie, agua, trabajadores, etc.)"""
     categoria = CategoriaHerramienta.CONSULTA
+    contexto_requerido = ContextoHerramienta.PROYECTO
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
@@ -164,6 +166,7 @@ Usa esta herramienta para:
 - Ver alertas generadas
 - Ver resumen del analisis"""
     categoria = CategoriaHerramienta.CONSULTA
+    contexto_requerido = ContextoHerramienta.PROYECTO
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
@@ -284,6 +287,7 @@ Usa esta herramienta cuando el usuario pregunte:
 - Proyectos del cliente X
 - Proyectos en estado borrador"""
     categoria = CategoriaHerramienta.CONSULTA
+    contexto_requerido = ContextoHerramienta.GLOBAL
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
@@ -425,6 +429,7 @@ Usa esta herramienta cuando el usuario pregunte:
 - Resumen de actividad
 - ¿Cuantos analisis se han hecho?"""
     categoria = CategoriaHerramienta.CONSULTA
+    contexto_requerido = ContextoHerramienta.GLOBAL
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 

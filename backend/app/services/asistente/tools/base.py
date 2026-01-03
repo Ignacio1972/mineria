@@ -26,6 +26,13 @@ class PermisoHerramienta(str, Enum):
     ADMIN = "admin"
 
 
+class ContextoHerramienta(str, Enum):
+    """Contexto donde la herramienta esta disponible."""
+    GLOBAL = "global"      # Solo en asistente global (sin proyecto)
+    PROYECTO = "proyecto"  # Solo con proyecto en contexto
+    AMBOS = "ambos"        # Disponible en ambos contextos
+
+
 @dataclass
 class ResultadoHerramienta:
     """Resultado de la ejecucion de una herramienta."""
@@ -55,6 +62,7 @@ class DefinicionHerramienta:
     description: str
     input_schema: Dict[str, Any]
     categoria: CategoriaHerramienta = CategoriaHerramienta.CONSULTA
+    contexto_requerido: ContextoHerramienta = ContextoHerramienta.AMBOS
     requiere_confirmacion: bool = False
     permisos: List[PermisoHerramienta] = field(default_factory=lambda: [PermisoHerramienta.LECTURA])
 
@@ -74,6 +82,7 @@ class Herramienta(ABC):
     nombre: str = ""
     descripcion: str = ""
     categoria: CategoriaHerramienta = CategoriaHerramienta.CONSULTA
+    contexto_requerido: ContextoHerramienta = ContextoHerramienta.AMBOS
     requiere_confirmacion: bool = False
     permisos: List[PermisoHerramienta] = [PermisoHerramienta.LECTURA]
 
@@ -109,6 +118,7 @@ class Herramienta(ABC):
             description=cls.descripcion,
             input_schema=cls.get_schema(),
             categoria=cls.categoria,
+            contexto_requerido=cls.contexto_requerido,
             requiere_confirmacion=cls.requiere_confirmacion,
             permisos=cls.permisos,
         )
@@ -160,6 +170,7 @@ class RegistroHerramientas:
     def listar(
         self,
         categoria: Optional[CategoriaHerramienta] = None,
+        contexto: Optional[ContextoHerramienta] = None,
         permisos_usuario: Optional[List[PermisoHerramienta]] = None
     ) -> List[DefinicionHerramienta]:
         """
@@ -167,6 +178,7 @@ class RegistroHerramientas:
 
         Args:
             categoria: Filtrar por categoria
+            contexto: Filtrar por contexto (GLOBAL, PROYECTO, AMBOS)
             permisos_usuario: Permisos del usuario para filtrar
 
         Returns:
@@ -181,6 +193,15 @@ class RegistroHerramientas:
             if categoria and definicion.categoria != categoria:
                 continue
 
+            # Filtrar por contexto
+            if contexto:
+                # Si la herramienta es AMBOS, siempre incluir
+                if definicion.contexto_requerido == ContextoHerramienta.AMBOS:
+                    pass  # Siempre incluir
+                # Si el contexto solicitado no coincide, excluir
+                elif definicion.contexto_requerido != contexto:
+                    continue
+
             # Filtrar por permisos
             if permisos_usuario is not None:
                 if not all(p in permisos_usuario for p in definicion.permisos):
@@ -192,18 +213,20 @@ class RegistroHerramientas:
 
     def obtener_tools_anthropic(
         self,
+        contexto: Optional[ContextoHerramienta] = None,
         permisos_usuario: Optional[List[PermisoHerramienta]] = None
     ) -> List[Dict[str, Any]]:
         """
         Obtiene las herramientas en formato Anthropic Tool Use.
 
         Args:
+            contexto: Filtrar por contexto (GLOBAL, PROYECTO)
             permisos_usuario: Permisos del usuario para filtrar
 
         Returns:
             Lista de herramientas en formato Anthropic
         """
-        definiciones = self.listar(permisos_usuario=permisos_usuario)
+        definiciones = self.listar(contexto=contexto, permisos_usuario=permisos_usuario)
         return [d.to_anthropic_format() for d in definiciones]
 
     async def ejecutar(self, nombre: str, **kwargs) -> ResultadoHerramienta:

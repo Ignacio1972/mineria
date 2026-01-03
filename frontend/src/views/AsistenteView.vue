@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAsistenteStore } from '@/stores/asistente'
-import { useFichaStore } from '@/stores/ficha'
 import { storeToRefs } from 'pinia'
 import ChatAsistente from '@/components/asistente/ChatAsistente.vue'
 import MessageList from '@/components/asistente/MessageList.vue'
@@ -15,7 +14,6 @@ import type { NotificacionProactiva } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const store = useAsistenteStore()
-const fichaStore = useFichaStore()
 
 const {
   mensajes,
@@ -38,7 +36,6 @@ const panelBusquedaWeb = ref(false)
 const dialogoConfirmacion = ref(false)
 const procesandoConfirmacion = ref(false)
 const sugerenciasActuales = ref<string[]>([])
-const usarNuevoLayout = ref(true) // Toggle para usar ChatAsistente con ficha lateral
 
 // Proyecto ID activo (desde query param, store, o conversacion)
 const proyectoIdActivo = computed(() => {
@@ -314,20 +311,6 @@ onMounted(async () => {
         </div>
 
         <div class="flex items-center gap-2">
-          <!-- Toggle Ficha Lateral (solo si hay proyecto) -->
-          <div v-if="proyectoIdActivo && !panelBusquedaWeb" class="tooltip tooltip-bottom" data-tip="Ficha lateral">
-            <button
-              class="btn btn-sm btn-ghost gap-1"
-              :class="usarNuevoLayout ? 'text-primary-content' : 'text-primary-content/50'"
-              @click="usarNuevoLayout = !usarNuevoLayout"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <span class="hidden sm:inline">Ficha</span>
-            </button>
-          </div>
-
           <!-- Toggle Asistente / Web -->
           <div class="join bg-primary-content/20 rounded-lg">
             <button
@@ -404,9 +387,9 @@ onMounted(async () => {
         <BusquedaWebPanel class="h-full" />
       </div>
 
-      <!-- Modo Chat con Ficha Lateral (nuevo layout) -->
+      <!-- Modo Chat con proyecto activo -->
       <div
-        v-else-if="usarNuevoLayout && proyectoIdActivo"
+        v-else-if="proyectoIdActivo"
         class="flex-1 overflow-hidden"
       >
         <ChatAsistente
@@ -415,7 +398,7 @@ onMounted(async () => {
         />
       </div>
 
-      <!-- Modo Chat Clasico - Solo visible cuando no está el panel web ni el nuevo layout -->
+      <!-- Modo Chat sin proyecto -->
       <template v-else>
         <!-- Error global -->
         <div v-if="error" class="alert alert-error m-4">

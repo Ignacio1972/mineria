@@ -12,6 +12,7 @@ from .base import (
     Herramienta,
     ResultadoHerramienta,
     CategoriaHerramienta,
+    ContextoHerramienta,
     PermisoHerramienta,
     registro_herramientas,
 )
@@ -49,6 +50,7 @@ IMPORTANTE: Cada resultado incluye 'documento_id', 'documento_tipo' y 'url_docum
 Los resultados de Guias/Criterios/Instructivos aparecen primero porque contienen
 la interpretacion OFICIAL del SEA con datos especificos."""
     categoria = CategoriaHerramienta.RAG
+    contexto_requerido = ContextoHerramienta.AMBOS
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
@@ -264,6 +266,7 @@ Usa esta herramienta cuando el usuario pregunte sobre:
 - Proceso de analisis
 - Significado de clasificaciones o alertas"""
     categoria = CategoriaHerramienta.RAG
+    contexto_requerido = ContextoHerramienta.AMBOS
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
@@ -380,6 +383,7 @@ Usa esta herramienta cuando el usuario pregunte:
 - Estado del corpus RAG
 - ¿Cuántos temas hay disponibles?"""
     categoria = CategoriaHerramienta.RAG
+    contexto_requerido = ContextoHerramienta.AMBOS
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
@@ -566,6 +570,7 @@ Usa esta herramienta cuando el usuario pregunte:
 - ¿Que triggers activo este proyecto?
 - Explicame la clasificacion del analisis"""
     categoria = CategoriaHerramienta.RAG
+    contexto_requerido = ContextoHerramienta.AMBOS
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
 
