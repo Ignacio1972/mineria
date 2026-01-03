@@ -4,9 +4,10 @@ Endpoints CRUD para Proyectos.
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from geoalchemy2.shape import from_shape, to_shape
 from shapely.geometry import shape, mapping, MultiPolygon
+import logging
 
 from app.db.session import get_db
 from app.db.models import Proyecto, Cliente, DocumentoProyecto, Analisis
@@ -20,6 +21,8 @@ from app.schemas.proyecto import (
     EstadoProyecto,
     CambioEstadoRequest,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -292,7 +295,7 @@ async def actualizar_geometria(
     data: ProyectoGeometriaUpdate,
     db: AsyncSession = Depends(get_db),
 ):
-    """Actualizar solo la geometria del proyecto."""
+    """Actualizar solo la geometria del proyecto y calcular region/comuna automaticamente."""
     result = await db.execute(select(Proyecto).where(Proyecto.id == proyecto_id))
     proyecto = result.scalar()
 
@@ -308,6 +311,48 @@ async def actualizar_geometria(
         geom_shape = MultiPolygon([geom_shape])
 
     proyecto.geom = from_shape(geom_shape, srid=4326)
+
+    # Calcular region y comuna automaticamente desde las capas GIS
+    try:
+        # Obtener region donde intersecta el poligono (con mayor area de interseccion)
+        region_query = text("""
+            SELECT nombre
+            FROM gis.regiones
+            WHERE ST_Intersects(geom, ST_GeomFromText(:wkt, 4326))
+            ORDER BY ST_Area(ST_Intersection(geom, ST_GeomFromText(:wkt, 4326))) DESC
+            LIMIT 1
+        """)
+        region_result = await db.execute(region_query, {"wkt": geom_shape.wkt})
+        region_row = region_result.fetchone()
+
+        if region_row:
+            proyecto.region = region_row[0]
+            logger.info(f"Region calculada automaticamente: {proyecto.region}")
+        else:
+            logger.warning("No se encontro region para el poligono")
+            proyecto.region = None
+
+        # Obtener comuna donde intersecta el poligono
+        comuna_query = text("""
+            SELECT comuna
+            FROM gis.comunas
+            WHERE ST_Intersects(geom, ST_GeomFromText(:wkt, 4326))
+            ORDER BY ST_Area(ST_Intersection(geom, ST_GeomFromText(:wkt, 4326))) DESC
+            LIMIT 1
+        """)
+        comuna_result = await db.execute(comuna_query, {"wkt": geom_shape.wkt})
+        comuna_row = comuna_result.fetchone()
+
+        if comuna_row:
+            proyecto.comuna = comuna_row[0]
+            logger.info(f"Comuna calculada automaticamente: {proyecto.comuna}")
+        else:
+            logger.warning("No se encontro comuna para el poligono")
+            proyecto.comuna = None
+
+    except Exception as e:
+        logger.error(f"Error calculando region/comuna: {e}")
+        # No lanzar excepcion, solo logear el error
 
     await db.commit()
     await db.refresh(proyecto)

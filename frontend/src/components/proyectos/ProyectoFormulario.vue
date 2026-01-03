@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useClientesStore } from '@/stores/clientes'
 import type { DatosProyecto } from '@/types'
-import { REGIONES_CHILE, TIPOS_MINERIA, FASES_PROYECTO, FUENTES_AGUA, COMUNAS_POR_REGION } from '@/types'
+import { TIPOS_MINERIA, FASES_PROYECTO, FUENTES_AGUA } from '@/types'
 
 const props = defineProps<{
   modelValue?: DatosProyecto
@@ -36,12 +36,6 @@ const formulario = ref<DatosProyecto>({
   descripcion: null,
 })
 
-// Comunas disponibles segun region
-const comunasDisponibles = computed(() => {
-  if (!formulario.value.region) return []
-  return COMUNAS_POR_REGION[formulario.value.region] || []
-})
-
 // Flag para evitar ciclo de actualizaciones
 const actualizandoDesdeProps = ref(false)
 
@@ -70,16 +64,6 @@ watch(
     }
   },
   { deep: true }
-)
-
-// Reset comuna si cambia region
-watch(
-  () => formulario.value.region,
-  () => {
-    if (!comunasDisponibles.value.includes(formulario.value.comuna || '')) {
-      formulario.value.comuna = null
-    }
-  }
 )
 
 onMounted(() => {
@@ -146,33 +130,40 @@ function guardar() {
     <!-- Seccion: Ubicacion -->
     <div>
       <h3 class="font-semibold mb-4">Ubicacion</h3>
+
+      <!-- Mensaje informativo -->
+      <div class="alert alert-info mb-4 py-2">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-5 h-5">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span class="text-sm">La region y comuna se calculan automaticamente desde el poligono del mapa</span>
+      </div>
+
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="form-control">
           <label class="label">
             <span class="label-text">Region</span>
+            <span class="label-text-alt text-xs opacity-60">Auto</span>
           </label>
-          <select v-model="formulario.region" class="select select-bordered">
-            <option :value="null">Seleccionar region</option>
-            <option v-for="region in REGIONES_CHILE" :key="region" :value="region">
-              {{ region }}
-            </option>
-          </select>
+          <input
+            type="text"
+            :value="formulario.region || 'Sin definir - Dibuja el poligono en el mapa'"
+            class="input input-bordered bg-base-200"
+            disabled
+          />
         </div>
 
         <div class="form-control">
           <label class="label">
             <span class="label-text">Comuna</span>
+            <span class="label-text-alt text-xs opacity-60">Auto</span>
           </label>
-          <select
-            v-model="formulario.comuna"
-            class="select select-bordered"
-            :disabled="!formulario.region"
-          >
-            <option :value="null">Seleccionar comuna</option>
-            <option v-for="comuna in comunasDisponibles" :key="comuna" :value="comuna">
-              {{ comuna }}
-            </option>
-          </select>
+          <input
+            type="text"
+            :value="formulario.comuna || 'Sin definir - Dibuja el poligono en el mapa'"
+            class="input input-bordered bg-base-200"
+            disabled
+          />
         </div>
       </div>
     </div>
