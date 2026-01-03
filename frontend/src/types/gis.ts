@@ -37,6 +37,12 @@ export interface CapaGIS {
   opacidad: number;
   url?: string;
   estilo?: EstiloCapa;
+  // Campos para capas WMS externas (no GeoServer local)
+  wmsExterno?: {
+    url: string;      // URL base del servicio WMS
+    layers: string;   // Nombre de la capa en el WMS
+    attribution?: string; // Atribución/créditos
+  };
 }
 
 export type CategoriaCapaGIS =
@@ -46,6 +52,7 @@ export type CategoriaCapaGIS =
   | 'patrimonio'
   | 'limites_admin'
   | 'riesgos'
+  | 'uso_suelo'
   | 'base';
 
 export interface EstiloCapa {
@@ -134,7 +141,7 @@ export const CAPAS_DISPONIBLES: CapaGIS[] = [
   {
     id: 'regiones',
     nombre: 'Regiones',
-    descripcion: 'División regional de Chile',
+    descripcion: 'División regional de Chile (16 regiones)',
     tipo: 'vector',
     categoria: 'limites_admin',
     visible: false,
@@ -142,9 +149,19 @@ export const CAPAS_DISPONIBLES: CapaGIS[] = [
     estilo: { strokeColor: '#6b7280', strokeWidth: 2 },
   },
   {
+    id: 'provincias',
+    nombre: 'Provincias',
+    descripcion: 'División provincial de Chile (56 provincias)',
+    tipo: 'vector',
+    categoria: 'limites_admin',
+    visible: false,
+    opacidad: 0.5,
+    estilo: { strokeColor: '#8b5cf6', strokeWidth: 1.5 },
+  },
+  {
     id: 'comunas',
     nombre: 'Comunas',
-    descripcion: 'División comunal de Chile',
+    descripcion: 'División comunal de Chile (345 comunas)',
     tipo: 'vector',
     categoria: 'limites_admin',
     visible: false,
@@ -161,6 +178,21 @@ export const CAPAS_DISPONIBLES: CapaGIS[] = [
     opacidad: 0.7,
     estilo: { fillColor: '#10b981', strokeColor: '#059669', fillOpacity: 0.4 },
   },
+  // Capas externas (WMS de terceros)
+  {
+    id: 'ciren_industria_forestal',
+    nombre: 'Industria Forestal (INFOR)',
+    descripcion: 'Catastro de la Industria Forestal Primaria 2025 - CIREN/INFOR',
+    tipo: 'vector',
+    categoria: 'uso_suelo',
+    visible: false,
+    opacidad: 0.7,
+    wmsExterno: {
+      url: 'https://esri.ciren.cl/server/services/IDEMINAGRI/INDUSTRIA_FORESTAL_INFOR/MapServer/WMSServer',
+      layers: '0',
+      attribution: 'CIREN - INFOR',
+    },
+  },
 ];
 
 export const CATEGORIAS_CAPA: Record<CategoriaCapaGIS, string> = {
@@ -170,5 +202,6 @@ export const CATEGORIAS_CAPA: Record<CategoriaCapaGIS, string> = {
   patrimonio: 'Patrimonio Cultural',
   limites_admin: 'Límites Administrativos',
   riesgos: 'Riesgos Naturales',
+  uso_suelo: 'Uso de Suelo',
   base: 'Mapas Base',
 };

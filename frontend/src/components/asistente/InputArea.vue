@@ -63,14 +63,6 @@ function autoResize() {
 watch(mensaje, () => {
   autoResize()
 })
-
-// Ejemplos de consultas
-const ejemplos = [
-  '¿Que es el Art. 11 de la Ley 19.300?',
-  '¿Cuando un proyecto requiere EIA?',
-  'Crea un proyecto de prueba en Atacama',
-  '¿Que capas GIS estan disponibles?',
-]
 </script>
 
 <template>
@@ -87,22 +79,6 @@ const ejemplos = [
           @click="seleccionarSugerencia(sugerencia)"
         >
           {{ sugerencia }}
-        </button>
-      </div>
-    </div>
-
-    <!-- Ejemplos cuando no hay mensajes -->
-    <div v-if="sugerencias.length === 0 && !mensaje" class="mb-3">
-      <p class="text-xs text-base-content/60 mb-2">Prueba con:</p>
-      <div class="flex flex-wrap gap-2">
-        <button
-          v-for="(ejemplo, idx) in ejemplos"
-          :key="idx"
-          class="btn btn-xs btn-ghost"
-          :disabled="enviando"
-          @click="seleccionarSugerencia(ejemplo)"
-        >
-          {{ ejemplo }}
         </button>
       </div>
     </div>

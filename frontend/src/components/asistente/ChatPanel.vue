@@ -12,16 +12,19 @@ interface Props {
   proyectoId?: number
   vistaActual?: string
   colapsado?: boolean
+  modoBusquedaWeb?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   vistaActual: 'dashboard',
   colapsado: false,
+  modoBusquedaWeb: false,
 })
 
 const emit = defineEmits<{
   (e: 'toggle-colapso'): void
   (e: 'navegar', ruta: string): void
+  (e: 'toggle-modo-web'): void
 }>()
 
 const store = useAsistenteStore()
@@ -137,17 +140,15 @@ onMounted(async () => {
 <template>
   <div
     class="flex flex-col h-full bg-base-100 rounded-lg shadow-lg overflow-hidden"
-    :class="{ 'w-80': !colapsado, 'w-12': colapsado }"
+    :class="colapsado ? 'w-12' : 'w-full'"
   >
     <!-- Header -->
-    <div class="bg-primary text-primary-content p-3 flex items-center justify-between shrink-0">
+    <div class="bg-primary text-primary-content p-2 flex items-center justify-between shrink-0">
       <div v-if="!colapsado" class="flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
-        <span class="font-semibold">Asistente IA</span>
-
-        <!-- Indicador de estado -->
+        <span class="font-semibold text-sm">Chat IA</span>
         <span
           class="w-2 h-2 rounded-full"
           :class="{
@@ -158,33 +159,53 @@ onMounted(async () => {
         ></span>
       </div>
 
-      <div class="flex items-center gap-1">
+      <div v-if="!colapsado" class="flex items-center gap-1">
+        <!-- Toggle modo web -->
+        <button
+          class="btn btn-ghost btn-xs text-primary-content gap-1"
+          title="Busqueda Web"
+          @click="emit('toggle-modo-web')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+          </svg>
+          <span class="text-xs">Web</span>
+        </button>
+
         <!-- Nueva conversacion -->
         <button
-          v-if="!colapsado"
-          class="btn btn-ghost btn-sm btn-circle text-primary-content"
+          class="btn btn-ghost btn-xs btn-circle text-primary-content"
           title="Nueva conversacion"
           @click="nuevaConversacion"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
         </button>
 
         <!-- Toggle colapso -->
         <button
-          class="btn btn-ghost btn-sm btn-circle text-primary-content"
-          :title="colapsado ? 'Expandir' : 'Colapsar'"
+          class="btn btn-ghost btn-xs btn-circle text-primary-content"
+          title="Colapsar"
           @click="emit('toggle-colapso')"
         >
-          <svg v-if="!colapsado" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
           </svg>
         </button>
       </div>
+
+      <!-- Cuando esta colapsado -->
+      <button
+        v-else
+        class="btn btn-ghost btn-xs btn-circle text-primary-content mx-auto"
+        title="Expandir"
+        @click="emit('toggle-colapso')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+        </svg>
+      </button>
     </div>
 
     <!-- Contenido cuando esta expandido -->

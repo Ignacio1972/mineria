@@ -133,3 +133,6 @@ data/gis/fuentes/mma/*/*.shx
 data/gis/fuentes/mma/*/*.dbf
 data/gis/fuentes/mma/*/*.prj
 data/gis/fuentes/mma/*/*.cpg
+
+# Datos GIS pesados
+datoos/

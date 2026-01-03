@@ -3,6 +3,10 @@ import { ref, computed } from 'vue'
 import { asistenteService } from '@/services/asistente'
 import type { BusquedaWebResponse, ModoBusquedaWeb, FuenteWeb } from '@/types'
 
+const emit = defineEmits<{
+  (e: 'volver-chat'): void
+}>()
+
 // Estado
 const query = ref('')
 const modo = ref<ModoBusquedaWeb>('chat')
@@ -77,30 +81,45 @@ verificarPerplexity()
 </script>
 
 <template>
-  <div class="bg-base-200 rounded-lg p-4 flex flex-col">
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4 shrink-0">
+  <div class="bg-base-200 rounded-lg flex flex-col h-full">
+    <!-- Header compacto -->
+    <div class="bg-primary text-primary-content p-2 flex items-center justify-between shrink-0 rounded-t-lg">
       <div class="flex items-center gap-2">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-        <h3 class="font-semibold">Búsqueda Web Actualizada</h3>
+        <span class="font-semibold text-sm">Búsqueda Web</span>
         <div
           v-if="perplexityHabilitado !== null"
-          class="badge badge-sm"
+          class="badge badge-xs"
           :class="perplexityHabilitado ? 'badge-success' : 'badge-warning'"
         >
-          {{ perplexityHabilitado ? 'Perplexity' : 'Fallback Claude' }}
+          {{ perplexityHabilitado ? 'Perplexity' : 'Claude' }}
         </div>
       </div>
-      <button
-        v-if="resultado"
-        class="btn btn-ghost btn-xs"
-        @click="limpiar"
-      >
-        Limpiar
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          v-if="resultado"
+          class="btn btn-ghost btn-xs text-primary-content"
+          @click="limpiar"
+        >
+          Limpiar
+        </button>
+        <button
+          class="btn btn-ghost btn-xs text-primary-content gap-1"
+          title="Volver al Chat IA"
+          @click="emit('volver-chat')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          <span class="text-xs">Chat</span>
+        </button>
+      </div>
     </div>
+
+    <!-- Contenido -->
+    <div class="p-4 flex-1 flex flex-col overflow-hidden">
 
     <!-- Formulario -->
     <div class="space-y-3 shrink-0">
@@ -216,5 +235,6 @@ verificarPerplexity()
     <p v-if="!resultado && !error" class="text-xs text-base-content/50 mt-3 shrink-0">
       Presiona Ctrl+Enter para buscar. Usa modo "Research" para investigaciones profundas.
     </p>
+    </div>
   </div>
 </template>

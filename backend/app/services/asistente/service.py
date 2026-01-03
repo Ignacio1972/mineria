@@ -71,12 +71,45 @@ CAPACIDADES:
 - Crear y modificar proyectos (requiere confirmacion)
 - Ejecutar analisis de prefactibilidad (requiere confirmacion)
 
-REGLAS IMPORTANTES:
-1. SIEMPRE cita fuentes legales cuando expliques normativa
+VERIFICACION OBLIGATORIA - REGLA CRITICA:
+Cuando el usuario pregunte sobre CUALQUIERA de estos temas, DEBES usar la herramienta
+'buscar_normativa' ANTES de responder:
+- Requisitos para ingresar al SEIA
+- Umbrales de produccion, tonelaje, superficie o capacidad
+- Plazos legales o administrativos
+- Articulos especificos de leyes o reglamentos
+- Diferencias entre DIA y EIA
+- Triggers del Articulo 11
+- Cualquier dato numerico o especifico de la normativa chilena
+- Metodologias de evaluacion ambiental
+- Criterios tecnicos para lineas de base
+- Contenido de DIA o EIA
+- Procedimientos administrativos del SEIA
+- Participacion ciudadana o consulta indigena
+- Permisos ambientales sectoriales (PAS)
+
+IMPORTANCIA DE LAS GUIAS, INSTRUCTIVOS Y CRITERIOS SEA:
+El corpus contiene principalmente Guias SEA (125+), Criterios SEA (28+) e Instructivos (12+).
+Estos documentos son FUNDAMENTALES porque:
+- Contienen la interpretacion OFICIAL del SEA sobre como aplicar la normativa
+- Incluyen datos especificos (umbrales, plazos, metodologias) que NO estan en las leyes base
+- Son vinculantes para la evaluacion ambiental en Chile
+- Ejemplo: El umbral de 5.000 t/mes para proyectos mineros esta en la Guia SEA, no en la Ley 19.300
+
+NUNCA respondas sobre normativa, guias, instructivos o criterios desde tu conocimiento general.
+Tu conocimiento base puede estar desactualizado o ser incorrecto para la legislacion chilena.
+SIEMPRE verifica primero en el corpus usando 'buscar_normativa'.
+
+Si la busqueda no encuentra informacion relevante:
+1. Indica claramente que no se encontro la informacion en el corpus
+2. NO inventes ni supongas datos
+3. Sugiere al usuario verificar en fuentes oficiales (SEA, Biblioteca del Congreso)
+
+REGLAS ADICIONALES:
+1. SIEMPRE cita fuentes legales con documento_id y url_documento cuando expliques normativa
 2. Las acciones que modifican datos REQUIEREN confirmacion del usuario
-3. Si no encuentras informacion, indicalo claramente
-4. Se conciso pero completo en tus respuestas
-5. Usa lenguaje tecnico apropiado para profesionales ambientales
+3. Se conciso pero completo en tus respuestas
+4. Usa lenguaje tecnico apropiado para profesionales ambientales
 
 CONTEXTO DEL SISTEMA:
 - Art. 11 Ley 19.300 define triggers para EIA (letras a-f)
@@ -429,8 +462,21 @@ class EjecutorHerramientas:
             )
 
             # Generar descripcion legible
+            # Si hay proyecto_id, obtener el nombre para mejor UX
+            descripcion_params = dict(tool_input)
+            if "proyecto_id" in tool_input:
+                try:
+                    result = await self.db.execute(
+                        select(Proyecto.nombre).where(Proyecto.id == tool_input["proyecto_id"])
+                    )
+                    proyecto_nombre = result.scalar()
+                    if proyecto_nombre:
+                        descripcion_params["_proyecto_nombre"] = proyecto_nombre
+                except Exception as e:
+                    logger.warning(f"No se pudo obtener nombre del proyecto: {e}")
+
             if hasattr(herramienta, 'generar_descripcion_confirmacion'):
-                descripcion = herramienta.generar_descripcion_confirmacion(**tool_input)
+                descripcion = herramienta.generar_descripcion_confirmacion(**descripcion_params)
             else:
                 descripcion = f"Ejecutar {tool_name}"
 
@@ -676,6 +722,20 @@ class AsistenteService:
             conversacion_id=conversacion.id,
         )
 
+        # Recargar contexto si se ejecutaron herramientas que modifican estado
+        # Esto asegura que las sugerencias reflejen el estado actual del proyecto
+        herramientas_modificadoras = {'crear_proyecto', 'ejecutar_analisis', 'actualizar_proyecto'}
+        herramientas_ejecutadas = {tc.name for tc in tool_calls} if tool_calls else set()
+
+        if herramientas_ejecutadas & herramientas_modificadoras:
+            logger.info(f"Recargando contexto tras ejecutar: {herramientas_ejecutadas & herramientas_modificadoras}")
+            contexto = await self.gestor_contexto.obtener_contexto(
+                session_id=request.session_id,
+                user_id=request.user_id,
+                proyecto_id=request.proyecto_contexto_id,
+                vista_actual=request.vista_actual or "dashboard",
+            )
+
         # Calcular metricas
         latencia_ms = int((time.time() - inicio) * 1000)
 
@@ -888,8 +948,10 @@ class AsistenteService:
                 )
                 return texto_respuesta, tool_calls_realizados, fuentes, accion_pendiente
 
-        # Limite de iteraciones alcanzado
+        # Limite de iteraciones alcanzado - avisar al usuario
         logger.warning("Limite de iteraciones de tool use alcanzado")
+        aviso_limite = "\n\n---\n**Nota:** La consulta requirió muchas operaciones y fue simplificada. Si necesitas más información, intenta hacer una pregunta más específica."
+        texto_respuesta = (texto_respuesta or "") + aviso_limite
         return texto_respuesta, tool_calls_realizados, fuentes, accion_pendiente
 
     async def _generar_mensaje_confirmacion(

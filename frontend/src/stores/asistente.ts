@@ -329,10 +329,28 @@ export const useAsistenteStore = defineStore('asistente', () => {
   // ==========================================================================
 
   /**
-   * Establece el proyecto de contexto.
+   * Establece el proyecto de contexto y lo persiste en localStorage.
    */
   function setProyectoContexto(proyectoId: number | null): void {
     proyectoContextoId.value = proyectoId
+    if (proyectoId !== null) {
+      localStorage.setItem('ultimo_proyecto_contexto', String(proyectoId))
+    }
+  }
+
+  /**
+   * Recupera el proyecto de contexto desde localStorage.
+   */
+  function recuperarProyectoContexto(): number | null {
+    const stored = localStorage.getItem('ultimo_proyecto_contexto')
+    if (stored) {
+      const id = parseInt(stored, 10)
+      if (!isNaN(id)) {
+        proyectoContextoId.value = id
+        return id
+      }
+    }
+    return null
   }
 
   /**
@@ -430,6 +448,7 @@ export const useAsistenteStore = defineStore('asistente', () => {
 
     // Acciones - Contexto
     setProyectoContexto,
+    recuperarProyectoContexto,
     setVistaActual,
 
     // Acciones - Feedback

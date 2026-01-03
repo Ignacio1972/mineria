@@ -5,6 +5,7 @@ import { useMapStore } from '@/stores/map';
 import type { GeometriaGeoJSON } from '@/types';
 import MapControls from './MapControls.vue';
 import DrawTools from './DrawTools.vue';
+import LayerPanel from './LayerPanel.vue';
 
 const props = defineProps<{
   geometria?: GeometriaGeoJSON | null
@@ -15,6 +16,10 @@ const emit = defineEmits<{
   (e: 'update:geometria', geom: GeometriaGeoJSON | null): void
 }>()
 
+function onImportarKML(geom: GeometriaGeoJSON) {
+  emit('update:geometria', geom);
+}
+
 const GEOSERVER_URL = import.meta.env.VITE_GEOSERVER_URL || 'http://localhost:9085/geoserver';
 
 const mapStore = useMapStore();
@@ -23,6 +28,7 @@ const { herramientaDibujo } = storeToRefs(mapStore);
 const mapRef = ref<HTMLDivElement | null>(null);
 const tooltipRef = ref<HTMLDivElement | null>(null);
 const olMap = ref<any>(null);
+const layerPanelOpen = ref(false);
 const drawInteraction = ref<any>(null);
 const modifyInteraction = ref<any>(null);
 const projectLayer = ref<any>(null);
@@ -96,8 +102,30 @@ onMounted(async () => {
     olMap.value.addOverlay(tooltipOverlay.value);
   }
 
-  // Crear capas WMS para cada capa GIS
+  // Crear capas WMS para cada capa GIS (local o externa)
   function createWMSLayer(capaId: string, visible: boolean, opacidad: number) {
+    // Buscar la definición de la capa para verificar si es externa
+    const capaDef = mapStore.capas.find(c => c.id === capaId);
+
+    if (capaDef?.wmsExterno) {
+      // Capa WMS externa (ej: CIREN, IDE Chile, etc.)
+      const layer = new TileLayer({
+        source: new TileWMS({
+          url: capaDef.wmsExterno.url,
+          params: {
+            LAYERS: capaDef.wmsExterno.layers,
+            FORMAT: 'image/png',
+            TRANSPARENT: true,
+          },
+          crossOrigin: 'anonymous',
+        }),
+        visible: visible,
+        opacity: opacidad,
+      });
+      return layer;
+    }
+
+    // Capa WMS local (GeoServer)
     const layer = new TileLayer({
       source: new TileWMS({
         url: `${GEOSERVER_URL}/wms`,
@@ -308,9 +336,9 @@ onMounted(async () => {
       const targetCenter = fromLonLat(newCenter);
 
       // Solo animar si el cambio es significativo (más de 1000 metros)
-      if (currentCenter) {
-        const dx = Math.abs(currentCenter[0] - targetCenter[0]);
-        const dy = Math.abs(currentCenter[1] - targetCenter[1]);
+      if (currentCenter && targetCenter[0] !== undefined && targetCenter[1] !== undefined) {
+        const dx = Math.abs((currentCenter[0] ?? 0) - targetCenter[0]);
+        const dy = Math.abs((currentCenter[1] ?? 0) - targetCenter[1]);
         if (dx < 1000 && dy < 1000) return; // Ignorar cambios pequeños
       }
 
@@ -332,7 +360,42 @@ onMounted(async () => {
     <!-- El mapa tiene z-0 para crear stacking context, los controles z-50 estarán encima -->
     <div ref="mapRef" class="w-full h-full z-0"></div>
     <MapControls class="absolute top-4 right-4 z-50" />
-    <DrawTools v-if="!props.readonly" class="absolute bottom-24 left-4 z-50" :tiene-geometria="!!props.geometria" />
+    <DrawTools
+      v-if="!props.readonly"
+      class="absolute bottom-24 left-4 z-50"
+      :tiene-geometria="!!props.geometria"
+      @importar="onImportarKML"
+    />
+
+    <!-- Panel de capas GIS (superior izquierda) -->
+    <div class="absolute top-4 left-4 z-50">
+      <button
+        class="btn btn-sm bg-base-100 shadow-lg"
+        :class="{ 'btn-primary': layerPanelOpen }"
+        @click="layerPanelOpen = !layerPanelOpen"
+        title="Capas GIS"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        </svg>
+        <span class="hidden sm:inline ml-1">Capas</span>
+      </button>
+      <div
+        v-if="layerPanelOpen"
+        class="mt-2 bg-base-100 rounded-lg shadow-lg p-3 w-64 max-h-96 overflow-y-auto"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="font-semibold text-sm">Capas GIS</h3>
+          <button class="btn btn-ghost btn-xs" @click="layerPanelOpen = false">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <LayerPanel />
+      </div>
+    </div>
+
     <!-- Tooltip -->
     <div
       ref="tooltipRef"

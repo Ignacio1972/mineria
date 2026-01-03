@@ -3,6 +3,8 @@ Servicio de Asistente IA.
 
 Este modulo proporciona el servicio principal del asistente conversacional
 con soporte para tool use, memoria y confirmacion de acciones.
+
+Incluye el FichaService para gestionar la ficha acumulativa del proyecto.
 """
 from .service import (
     AsistenteService,
@@ -11,6 +13,10 @@ from .service import (
     GestorMemoria,
     EjecutorHerramientas,
     SanitizadorEntrada,
+)
+from .ficha import (
+    FichaService,
+    get_ficha_service,
 )
 from .tools import (
     Herramienta,
@@ -28,6 +34,9 @@ __all__ = [
     # Servicio principal
     "AsistenteService",
     "get_asistente_service",
+    # Ficha acumulativa
+    "FichaService",
+    "get_ficha_service",
     # Gestores
     "GestorContexto",
     "GestorMemoria",

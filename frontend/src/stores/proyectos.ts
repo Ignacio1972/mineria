@@ -222,6 +222,49 @@ export const useProyectosStore = defineStore('proyectos', () => {
     }
   }
 
+  async function eliminarProyecto(id: string) {
+    guardando.value = true
+    error.value = null
+
+    try {
+      await proyectosService.eliminar(id)
+
+      // Quitar de lista
+      proyectos.value = proyectos.value.filter((p) => p.id !== id)
+
+      // Limpiar actual
+      if (proyectoActual.value?.id === id) {
+        proyectoActual.value = null
+      }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Error al eliminar proyecto'
+      throw e
+    } finally {
+      guardando.value = false
+    }
+  }
+
+  async function restaurarProyecto(id: string) {
+    guardando.value = true
+    error.value = null
+
+    try {
+      const resultado = await proyectosService.restaurar(id)
+
+      // Recargar proyecto
+      if (proyectoActual.value?.id === id) {
+        await cargarProyecto(id)
+      }
+
+      return resultado
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Error al restaurar proyecto'
+      throw e
+    } finally {
+      guardando.value = false
+    }
+  }
+
   function limpiarActual() {
     proyectoActual.value = null
   }
@@ -252,6 +295,8 @@ export const useProyectosStore = defineStore('proyectos', () => {
     actualizarGeometria,
     cambiarEstado,
     archivarProyecto,
+    eliminarProyecto,
+    restaurarProyecto,
     limpiarActual,
     limpiarFiltros,
   }

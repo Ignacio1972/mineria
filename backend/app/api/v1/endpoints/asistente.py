@@ -20,6 +20,7 @@ from app.db.models.asistente import (
     Feedback,
     NotificacionEnviada,
 )
+from app.db.models.proyecto import Proyecto
 from app.schemas.asistente import (
     ChatRequest,
     ChatResponse,
@@ -140,16 +141,18 @@ async def listar_conversaciones(
     Returns:
         Lista de conversaciones ordenadas por fecha
     """
+    # Query con LEFT JOIN a proyectos para obtener el nombre
     result = await db.execute(
-        select(Conversacion)
+        select(Conversacion, Proyecto.nombre)
+        .outerjoin(Proyecto, Conversacion.proyecto_activo_id == Proyecto.id)
         .where(Conversacion.session_id == session_id)
         .order_by(desc(Conversacion.updated_at))
         .limit(limite)
     )
-    conversaciones = result.scalars().all()
+    rows = result.all()
 
     respuestas = []
-    for conv in conversaciones:
+    for conv, proyecto_nombre in rows:
         # Contar mensajes
         count_result = await db.execute(
             select(func.count()).where(Mensaje.conversacion_id == conv.id)
@@ -162,6 +165,7 @@ async def listar_conversaciones(
             user_id=conv.user_id,
             titulo=conv.titulo,
             proyecto_activo_id=conv.proyecto_activo_id,
+            proyecto_nombre=proyecto_nombre,
             vista_actual=conv.vista_actual,
             activa=conv.activa,
             total_mensajes=total_mensajes,
@@ -186,13 +190,18 @@ async def obtener_conversacion(
     Returns:
         Conversacion con mensajes
     """
+    # Query con LEFT JOIN a proyectos para obtener el nombre
     result = await db.execute(
-        select(Conversacion).where(Conversacion.id == conversacion_id)
+        select(Conversacion, Proyecto.nombre)
+        .outerjoin(Proyecto, Conversacion.proyecto_activo_id == Proyecto.id)
+        .where(Conversacion.id == conversacion_id)
     )
-    conversacion = result.scalar()
+    row = result.first()
 
-    if not conversacion:
+    if not row:
         raise HTTPException(status_code=404, detail="Conversacion no encontrada")
+
+    conversacion, proyecto_nombre = row
 
     # Obtener mensajes
     result_msgs = await db.execute(
@@ -225,6 +234,7 @@ async def obtener_conversacion(
         user_id=conversacion.user_id,
         titulo=conversacion.titulo,
         proyecto_activo_id=conversacion.proyecto_activo_id,
+        proyecto_nombre=proyecto_nombre,
         vista_actual=conversacion.vista_actual,
         activa=conversacion.activa,
         total_mensajes=len(mensajes_response),

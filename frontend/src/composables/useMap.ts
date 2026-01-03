@@ -69,17 +69,54 @@ export function useMap() {
   }
 
   function centrarEnGeometria(geom: GeometriaGeoJSON) {
+    let allCoords: number[][] = [];
+
     if (geom.type === 'Polygon') {
       const coords = geom.coordinates[0] as number[][];
-      if (!coords || coords.length === 0) return;
-      const lons = coords.map((c) => c[0]).filter((v): v is number => v !== undefined);
-      const lats = coords.map((c) => c[1]).filter((v): v is number => v !== undefined);
-      if (lons.length === 0 || lats.length === 0) return;
-      const centerLon = (Math.min(...lons) + Math.max(...lons)) / 2;
-      const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
-      mapStore.setCentro([centerLon, centerLat]);
-      mapStore.setZoom(12);
+      if (coords && coords.length > 0) {
+        allCoords = coords;
+      }
+    } else if (geom.type === 'MultiPolygon') {
+      const multiCoords = geom.coordinates as number[][][][];
+      for (const polygon of multiCoords) {
+        if (polygon[0]) {
+          allCoords = allCoords.concat(polygon[0]);
+        }
+      }
     }
+
+    if (allCoords.length === 0) return;
+
+    const lons = allCoords.map((c) => c[0]).filter((v): v is number => v !== undefined);
+    const lats = allCoords.map((c) => c[1]).filter((v): v is number => v !== undefined);
+    if (lons.length === 0 || lats.length === 0) return;
+
+    const minLon = Math.min(...lons);
+    const maxLon = Math.max(...lons);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+
+    const centerLon = (minLon + maxLon) / 2;
+    const centerLat = (minLat + maxLat) / 2;
+
+    // Calcular zoom basado en el tamaño del bounding box
+    const deltaLon = maxLon - minLon;
+    const deltaLat = maxLat - minLat;
+    const maxDelta = Math.max(deltaLon, deltaLat);
+
+    // Ajustar zoom según el tamaño (más pequeño = más zoom)
+    let zoom = 14;
+    if (maxDelta > 1) zoom = 8;
+    else if (maxDelta > 0.5) zoom = 9;
+    else if (maxDelta > 0.2) zoom = 10;
+    else if (maxDelta > 0.1) zoom = 11;
+    else if (maxDelta > 0.05) zoom = 12;
+    else if (maxDelta > 0.02) zoom = 13;
+    else if (maxDelta > 0.01) zoom = 14;
+    else zoom = 15;
+
+    mapStore.setCentro([centerLon, centerLat]);
+    mapStore.setZoom(zoom);
   }
 
   return {

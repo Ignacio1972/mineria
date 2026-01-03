@@ -63,10 +63,24 @@ export const proyectosService = {
   },
 
   /**
-   * Archivar proyecto.
+   * Archivar proyecto (soft delete).
    */
   async archivar(id: string): Promise<void> {
     return del(`${BASE_URL}/${id}`)
+  },
+
+  /**
+   * Eliminar proyecto permanentemente (solo borradores sin análisis).
+   */
+  async eliminar(id: string): Promise<void> {
+    return del(`${BASE_URL}/${id}?hard_delete=true`)
+  },
+
+  /**
+   * Restaurar proyecto archivado.
+   */
+  async restaurar(id: string): Promise<{ mensaje: string; estado_anterior: string; estado_actual: string }> {
+    return post(`${BASE_URL}/${id}/restaurar`, {})
   },
 
   /**

@@ -17,6 +17,10 @@ from app.api.v1.endpoints import (
     temas,
     # Asistente IA
     asistente,
+    # Configuración por Industria
+    config_industria,
+    # Ficha Acumulativa del Proyecto
+    ficha,
 )
 
 api_router = APIRouter()
@@ -113,4 +117,24 @@ api_router.include_router(
     asistente.router,
     prefix="/asistente",
     tags=["Asistente IA"],
+)
+
+# ============================================================================
+# Configuración por Industria - Multi-industria
+# ============================================================================
+
+api_router.include_router(
+    config_industria.router,
+    prefix="/config",
+    tags=["Configuración por Industria"],
+)
+
+# ============================================================================
+# Ficha Acumulativa del Proyecto
+# ============================================================================
+
+api_router.include_router(
+    ficha.router,
+    prefix="/ficha",
+    tags=["Ficha Acumulativa"],
 )

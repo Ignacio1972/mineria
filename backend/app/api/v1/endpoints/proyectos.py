@@ -365,20 +365,91 @@ async def cambiar_estado(
     return {"mensaje": f"Estado cambiado de {estado_actual} a {data.estado.value}"}
 
 
-@router.delete("/{proyecto_id}", status_code=204)
-async def eliminar_proyecto(
+@router.post("/{proyecto_id}/restaurar")
+async def restaurar_proyecto(
     proyecto_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Archivar proyecto (soft delete)."""
+    """
+    Restaurar un proyecto archivado.
+
+    El proyecto vuelve al estado 'borrador' para ser re-evaluado.
+    """
     result = await db.execute(select(Proyecto).where(Proyecto.id == proyecto_id))
     proyecto = result.scalar()
 
     if not proyecto:
         raise HTTPException(404, "Proyecto no encontrado")
 
-    proyecto.estado = "archivado"
+    if proyecto.estado != "archivado":
+        raise HTTPException(400, f"El proyecto no está archivado (estado: {proyecto.estado})")
+
+    # Determinar estado de restauración basado en datos del proyecto
+    if proyecto.geom is not None:
+        nuevo_estado = "con_geometria"
+    elif proyecto.porcentaje_completado and proyecto.porcentaje_completado >= 80:
+        nuevo_estado = "completo"
+    else:
+        nuevo_estado = "borrador"
+
+    proyecto.estado = nuevo_estado
     await db.commit()
+
+    return {
+        "mensaje": f"Proyecto restaurado exitosamente",
+        "estado_anterior": "archivado",
+        "estado_actual": nuevo_estado
+    }
+
+
+@router.delete("/{proyecto_id}", status_code=204)
+async def eliminar_proyecto(
+    proyecto_id: int,
+    hard_delete: bool = Query(False, description="Eliminar permanentemente (solo borradores sin análisis)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Eliminar proyecto.
+
+    - Por defecto: soft delete (archiva el proyecto)
+    - Con hard_delete=true: elimina permanentemente (solo proyectos en borrador sin análisis)
+    """
+    result = await db.execute(select(Proyecto).where(Proyecto.id == proyecto_id))
+    proyecto = result.scalar()
+
+    if not proyecto:
+        raise HTTPException(404, "Proyecto no encontrado")
+
+    if proyecto.estado == "archivado":
+        raise HTTPException(400, "El proyecto ya está archivado")
+
+    if hard_delete:
+        # Hard delete solo permitido para borradores
+        if proyecto.estado != "borrador":
+            raise HTTPException(
+                400,
+                f"Solo se pueden eliminar permanentemente proyectos en borrador. "
+                f"Estado actual: {proyecto.estado}"
+            )
+
+        # Verificar que no tenga análisis
+        analisis_count = await db.execute(
+            select(func.count()).where(Analisis.proyecto_id == proyecto_id)
+        )
+        if analisis_count.scalar() > 0:
+            raise HTTPException(
+                400,
+                "No se puede eliminar permanentemente: el proyecto tiene análisis registrados. "
+                "Use soft delete (archivar) en su lugar."
+            )
+
+        # Hard delete - las cascadas eliminan documentos e historial
+        await db.delete(proyecto)
+        await db.commit()
+    else:
+        # Soft delete - archivar
+        proyecto.estado = "archivado"
+        await db.commit()
 
 
 @router.get("/{proyecto_id}/analisis")

@@ -2,6 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
+  // Login
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/LoginView.vue'),
+    meta: { title: 'Login', public: true }
+  },
+
   // Dashboard
   {
     path: '/',
@@ -127,6 +135,21 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from, next) => {
+  // Verificar autenticación
+  const isAuthenticated = sessionStorage.getItem('auth') === 'true'
+  const isPublicRoute = to.meta.public === true
+
+  if (!isAuthenticated && !isPublicRoute) {
+    next({ name: 'login' })
+    return
+  }
+
+  if (isAuthenticated && to.name === 'login') {
+    next({ name: 'dashboard' })
+    return
+  }
+
+  // Actualizar título
   const title = to.meta.title as string | undefined
   document.title = title
     ? `${title} | Sistema de Prefactibilidad Ambiental Minera`

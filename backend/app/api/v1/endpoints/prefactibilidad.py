@@ -797,15 +797,21 @@ async def analisis_integrado(
     resultado_gis = await analizar_proyecto_espacial(db, geojson)
     tiempo_gis = int((time.time() - inicio_gis) * 1000)
 
+    # 3.1 Extraer ubicacion real desde el analisis GIS (basado en coordenadas)
+    ubicacion_gis = resultado_gis.get("ubicacion", {}) or {}
+    region_detectada = ubicacion_gis.get("region") or proyecto.region
+    comuna_detectada = ubicacion_gis.get("comuna") or proyecto.comuna
+
     # 4. Preparar datos del proyecto para el motor de reglas
+    # IMPORTANTE: Usar region/comuna detectadas del GIS, no las manuales del proyecto
     datos_proyecto = {
         "nombre": proyecto.nombre,
         "tipo_mineria": proyecto.tipo_mineria,
         "mineral_principal": proyecto.mineral_principal,
         "fase": proyecto.fase,
         "titular": proyecto.titular,
-        "region": proyecto.region,
-        "comuna": proyecto.comuna,
+        "region": region_detectada,
+        "comuna": comuna_detectada,
         "superficie_ha": float(proyecto.superficie_ha) if proyecto.superficie_ha else None,
         "produccion_estimada": proyecto.produccion_estimada,
         "vida_util_anos": proyecto.vida_util_anos,
@@ -1105,14 +1111,20 @@ async def obtener_ultimo_analisis(
         raise HTTPException(404, f"No hay analisis para el proyecto id={proyecto_id}")
 
     # Reconstruir datos del proyecto
+    # Extraer ubicacion del resultado_gis guardado si existe
+    resultado_gis_guardado = analisis.resultado_gis or {}
+    ubicacion_gis = resultado_gis_guardado.get("ubicacion", {}) or {}
+    region_detectada = ubicacion_gis.get("region") or proyecto.region
+    comuna_detectada = ubicacion_gis.get("comuna") or proyecto.comuna
+
     datos_proyecto = {
         "nombre": proyecto.nombre,
         "tipo_mineria": proyecto.tipo_mineria,
         "mineral_principal": proyecto.mineral_principal,
         "fase": proyecto.fase,
         "titular": proyecto.titular,
-        "region": proyecto.region,
-        "comuna": proyecto.comuna,
+        "region": region_detectada,
+        "comuna": comuna_detectada,
         "superficie_ha": float(proyecto.superficie_ha) if proyecto.superficie_ha else None,
         "produccion_estimada": proyecto.produccion_estimada,
         "vida_util_anos": proyecto.vida_util_anos,

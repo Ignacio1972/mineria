@@ -40,6 +40,7 @@ from .acciones import (
     CrearProyecto,
     EjecutarAnalisis,
     ActualizarProyecto,
+    GuardarFicha,
 )
 
 # Herramientas externas (APIs de terceros)
@@ -69,6 +70,7 @@ __all__ = [
     "CrearProyecto",
     "EjecutarAnalisis",
     "ActualizarProyecto",
+    "GuardarFicha",
     # Externas
     "BuscarWebActualizada",
 ]

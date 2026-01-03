@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProyectosStore } from '@/stores/proyectos'
 import { useMapStore } from '@/stores/map'
+import { useMap } from '@/composables/useMap'
 import MapContainer from '@/components/map/MapContainer.vue'
 import type { GeometriaGeoJSON } from '@/types'
 
@@ -10,6 +11,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useProyectosStore()
 const mapStore = useMapStore()
+const { centrarEnGeometria } = useMap()
 
 const guardando = ref(false)
 const geometriaLocal = ref<GeometriaGeoJSON | null>(null)
@@ -22,6 +24,8 @@ onMounted(async () => {
     await store.cargarProyecto(id)
     if (store.proyectoActual?.geometria) {
       geometriaLocal.value = store.proyectoActual.geometria
+      // Centrar el mapa en la geometría existente
+      centrarEnGeometria(store.proyectoActual.geometria)
     } else if (store.proyectoActual?.region) {
       // Si no tiene geometria, centrar en la region del proyecto
       mapStore.centrarEnRegion(store.proyectoActual.region)

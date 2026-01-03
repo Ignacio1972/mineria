@@ -6,9 +6,58 @@ import { get } from '@/services/api';
 
 const GEOSERVER_URL = import.meta.env.VITE_GEOSERVER_URL || 'http://localhost:9085/geoserver';
 
+// Claves para persistencia en localStorage
+const STORAGE_KEY_CENTRO = 'map_centro';
+const STORAGE_KEY_ZOOM = 'map_zoom';
+
+// Valores por defecto (Antofagasta, II Región)
+const DEFAULT_CENTRO: [number, number] = [-70.4, -23.65];
+const DEFAULT_ZOOM = 8;
+
+// Funciones de persistencia
+function guardarEstadoMapa(centroVal: [number, number], zoomVal: number): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_CENTRO, JSON.stringify(centroVal));
+    localStorage.setItem(STORAGE_KEY_ZOOM, String(zoomVal));
+  } catch (e) {
+    console.warn('[MapStore] Error guardando estado en localStorage:', e);
+  }
+}
+
+function recuperarCentro(): [number, number] {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_CENTRO);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length === 2) {
+        return [parsed[0], parsed[1]];
+      }
+    }
+  } catch (e) {
+    console.warn('[MapStore] Error recuperando centro desde localStorage:', e);
+  }
+  return DEFAULT_CENTRO;
+}
+
+function recuperarZoom(): number {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_ZOOM);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!isNaN(parsed) && parsed >= 3 && parsed <= 18) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('[MapStore] Error recuperando zoom desde localStorage:', e);
+  }
+  return DEFAULT_ZOOM;
+}
+
 export const useMapStore = defineStore('map', () => {
-  const centro = ref<[number, number]>([-70.4, -23.65]); // Antofagasta (II Región)
-  const zoom = ref(8);
+  // Inicializar desde localStorage o usar valores por defecto
+  const centro = ref<[number, number]>(recuperarCentro());
+  const zoom = ref(recuperarZoom());
   const capas = ref<CapaGIS[]>(CAPAS_DISPONIBLES.map((c) => ({ ...c })));
   const modoEdicion = ref(false);
   const herramientaDibujo = ref<'polygon' | 'modify' | 'delete' | null>(null);
@@ -49,10 +98,12 @@ export const useMapStore = defineStore('map', () => {
 
   function setCentro(coords: [number, number]) {
     centro.value = coords;
+    guardarEstadoMapa(coords, zoom.value);
   }
 
   function setZoom(level: number) {
     zoom.value = Math.max(3, Math.min(18, level));
+    guardarEstadoMapa(centro.value, zoom.value);
   }
 
   function zoomIn() {

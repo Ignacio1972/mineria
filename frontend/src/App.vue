@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { useUIStore } from '@/stores/ui';
 import { AppHeader, AppFooter } from '@/components/layout';
 
+const route = useRoute();
 const uiStore = useUIStore();
+
+const isLoginPage = computed(() => route.name === 'login');
 
 onMounted(() => {
   uiStore.cargarTema();
@@ -11,12 +15,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="app-layout min-h-screen bg-base-100" :data-theme="uiStore.tema">
-    <AppHeader class="app-header" />
+  <div class="min-h-screen bg-base-100" :class="{ 'app-layout': !isLoginPage }" :data-theme="uiStore.tema">
+    <AppHeader v-if="!isLoginPage" class="app-header" />
 
     <router-view class="app-main" />
 
-    <AppFooter class="app-footer" />
+    <AppFooter v-if="!isLoginPage" class="app-footer" />
 
     <!-- Toast notifications -->
     <div class="toast toast-end toast-bottom z-50">

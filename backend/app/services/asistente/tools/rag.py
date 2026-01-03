@@ -20,21 +20,34 @@ from app.services.rag.embeddings import get_embedding_service
 logger = logging.getLogger(__name__)
 
 
+# Tipos de documentos prioritarios (interpretacion oficial del SEA)
+TIPOS_PRIORITARIOS = ['Guía SEA', 'Criterio SEA', 'Instructivo', 'Instructivo SEA', 'Criterio', 'Manual']
+# Tipos de documentos base (leyes y reglamentos)
+TIPOS_BASE = ['Ley', 'Reglamento']
+
+
 @registro_herramientas.registrar
 class BuscarNormativa(Herramienta):
-    """Busca fragmentos relevantes en el corpus legal."""
+    """Busca fragmentos relevantes en el corpus legal con priorizacion de Guias/Instructivos/Criterios."""
 
     nombre = "buscar_normativa"
-    descripcion = """Busca fragmentos relevantes en el corpus legal del sistema (Ley 19.300, DS 40, Guias SEA).
-Usa esta herramienta cuando el usuario pregunte sobre:
+    descripcion = """Busca fragmentos relevantes en el corpus legal del sistema.
+IMPORTANTE: Esta herramienta usa busqueda en DOS PASOS para mayor precision:
+1. Primero busca en Guias SEA, Criterios e Instructivos (interpretacion oficial)
+2. Luego complementa con Leyes y Reglamentos (normativa base)
+
+Usa esta herramienta SIEMPRE que el usuario pregunte sobre:
 - Normativa ambiental chilena
-- Requisitos legales del SEIA
+- Requisitos legales del SEIA (umbrales, plazos, metodologias)
 - Articulos especificos de leyes o reglamentos
 - Fundamentos para clasificacion DIA/EIA
 - Triggers del Articulo 11
+- Procedimientos administrativos
+- Participacion ciudadana o consulta indigena
 
-IMPORTANTE: Cada resultado incluye 'documento_id' y 'url_documento' (ej: /corpus?doc=123).
-Cuando cites un documento, proporciona el enlace para que el usuario pueda consultarlo directamente."""
+IMPORTANTE: Cada resultado incluye 'documento_id', 'documento_tipo' y 'url_documento'.
+Los resultados de Guias/Criterios/Instructivos aparecen primero porque contienen
+la interpretacion OFICIAL del SEA con datos especificos."""
     categoria = CategoriaHerramienta.RAG
     requiere_confirmacion = False
     permisos = [PermisoHerramienta.LECTURA]
@@ -58,8 +71,8 @@ Cuando cites un documento, proporciona el enlace para que el usuario pueda consu
                 },
                 "top_k": {
                     "type": "integer",
-                    "description": "Numero de resultados a retornar",
-                    "default": 5,
+                    "description": "Numero total de resultados a retornar (se distribuyen entre tipos prioritarios y base)",
+                    "default": 8,
                     "minimum": 1,
                     "maximum": 20
                 },
@@ -70,23 +83,90 @@ Cuando cites un documento, proporciona el enlace para que el usuario pueda consu
                 },
                 "tipo_documento": {
                     "type": "string",
-                    "description": "Filtrar por tipo de documento: Ley, Reglamento, Guia, Instructivo",
-                    "enum": ["Ley", "Reglamento", "Guia", "Instructivo"]
+                    "description": "Filtrar por tipo especifico (omitir para busqueda en dos pasos)",
+                    "enum": ["Ley", "Reglamento", "Guía SEA", "Criterio SEA", "Instructivo"]
+                },
+                "solo_prioritarios": {
+                    "type": "boolean",
+                    "description": "Si es true, solo busca en Guias/Criterios/Instructivos",
+                    "default": False
                 }
             },
             "required": ["query"]
         }
 
+    async def _buscar_en_tipos(
+        self,
+        db: AsyncSession,
+        embedding_str: str,
+        tipos: List[str],
+        limite: int,
+        temas: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Busca fragmentos en tipos de documentos especificos."""
+
+        tipos_str = "', '".join(tipos)
+        sql = f"""
+            SELECT
+                f.id as fragmento_id,
+                f.documento_id,
+                d.titulo as documento_titulo,
+                d.tipo as documento_tipo,
+                f.numero_seccion as articulo,
+                f.seccion,
+                f.contenido,
+                f.temas,
+                1 - (f.embedding <=> '{embedding_str}'::vector) as similitud
+            FROM legal.fragmentos f
+            JOIN legal.documentos d ON f.documento_id = d.id
+            WHERE d.estado = 'vigente'
+            AND d.tipo IN ('{tipos_str}')
+            AND f.embedding IS NOT NULL
+        """
+
+        params = {"limite": limite}
+
+        if temas:
+            sql += " AND f.temas && :temas"
+            params["temas"] = temas
+
+        sql += f"""
+            ORDER BY f.embedding <=> '{embedding_str}'::vector
+            LIMIT :limite
+        """
+
+        result = await db.execute(text(sql), params)
+        rows = result.fetchall()
+
+        fragmentos = []
+        for row in rows:
+            if row.similitud >= 0.3:  # Umbral minimo
+                fragmentos.append({
+                    "fragmento_id": row.fragmento_id,
+                    "documento_id": row.documento_id,
+                    "documento_titulo": row.documento_titulo,
+                    "documento_tipo": row.documento_tipo,
+                    "articulo": row.articulo,
+                    "seccion": row.seccion,
+                    "contenido": row.contenido[:1000],
+                    "temas": row.temas or [],
+                    "similitud": round(row.similitud, 4),
+                    "url_documento": f"/corpus?doc={row.documento_id}",
+                })
+
+        return fragmentos
+
     async def ejecutar(
         self,
         query: str,
-        top_k: int = 5,
+        top_k: int = 8,
         temas: Optional[List[str]] = None,
         tipo_documento: Optional[str] = None,
+        solo_prioritarios: bool = False,
         db: Optional[AsyncSession] = None,
         **kwargs
     ) -> ResultadoHerramienta:
-        """Ejecuta busqueda semantica en corpus legal."""
+        """Ejecuta busqueda semantica en corpus legal con priorizacion de Guias/Criterios/Instructivos."""
 
         db = db or self._db
         if not db:
@@ -101,65 +181,66 @@ Cuando cites un documento, proporciona el enlace para que el usuario pueda consu
             query_embedding = self.embedding_service.embed_text(query)
             embedding_str = '[' + ','.join(str(x) for x in query_embedding) + ']'
 
-            # Construir SQL
-            sql = f"""
-                SELECT
-                    f.id as fragmento_id,
-                    f.documento_id,
-                    d.titulo as documento_titulo,
-                    d.tipo as documento_tipo,
-                    f.numero_seccion as articulo,
-                    f.seccion,
-                    f.contenido,
-                    f.temas,
-                    1 - (f.embedding <=> '{embedding_str}'::vector) as similitud
-                FROM legal.fragmentos f
-                JOIN legal.documentos d ON f.documento_id = d.id
-                WHERE d.estado = 'vigente'
-            """
-
-            params = {"limite": top_k}
-
-            if tipo_documento:
-                sql += " AND d.tipo = :tipo"
-                params["tipo"] = tipo_documento
-
-            if temas:
-                sql += " AND f.temas && :temas"
-                params["temas"] = temas
-
-            sql += f"""
-                ORDER BY f.embedding <=> '{embedding_str}'::vector
-                LIMIT :limite
-            """
-
-            result = await db.execute(text(sql), params)
-            rows = result.fetchall()
-
             fragmentos = []
-            for row in rows:
-                if row.similitud >= 0.3:  # Umbral minimo
-                    fragmentos.append({
-                        "fragmento_id": row.fragmento_id,
-                        "documento_id": row.documento_id,
-                        "documento_titulo": row.documento_titulo,
-                        "documento_tipo": row.documento_tipo,
-                        "articulo": row.articulo,
-                        "seccion": row.seccion,
-                        "contenido": row.contenido[:1000],  # Limitar contenido
-                        "temas": row.temas or [],
-                        "similitud": round(row.similitud, 4),
-                        "url_documento": f"/corpus?doc={row.documento_id}",
-                    })
+            metodo_busqueda = "dos_pasos"
+
+            # Si se especifica tipo_documento, busqueda simple filtrada
+            if tipo_documento:
+                metodo_busqueda = "filtrado"
+                fragmentos = await self._buscar_en_tipos(
+                    db, embedding_str, [tipo_documento], top_k, temas
+                )
+
+            # Si solo_prioritarios, buscar solo en Guias/Criterios/Instructivos
+            elif solo_prioritarios:
+                metodo_busqueda = "solo_prioritarios"
+                fragmentos = await self._buscar_en_tipos(
+                    db, embedding_str, TIPOS_PRIORITARIOS, top_k, temas
+                )
+
+            # Busqueda en dos pasos (comportamiento por defecto)
+            else:
+                # Paso 1: Buscar en tipos prioritarios (70% de resultados)
+                limite_prioritarios = max(1, int(top_k * 0.7))
+                fragmentos_prioritarios = await self._buscar_en_tipos(
+                    db, embedding_str, TIPOS_PRIORITARIOS, limite_prioritarios, temas
+                )
+
+                # Paso 2: Buscar en tipos base (30% de resultados)
+                limite_base = max(1, top_k - len(fragmentos_prioritarios))
+                fragmentos_base = await self._buscar_en_tipos(
+                    db, embedding_str, TIPOS_BASE, limite_base, temas
+                )
+
+                # Combinar: prioritarios primero, luego base
+                fragmentos = fragmentos_prioritarios + fragmentos_base
+
+                # Log para debugging
+                logger.info(
+                    f"Busqueda dos pasos: {len(fragmentos_prioritarios)} prioritarios + "
+                    f"{len(fragmentos_base)} base = {len(fragmentos)} total"
+                )
+
+            # Marcar origen de cada fragmento para claridad
+            for frag in fragmentos:
+                frag["es_prioritario"] = frag["documento_tipo"] in TIPOS_PRIORITARIOS
 
             return ResultadoHerramienta(
                 exito=True,
                 contenido={
                     "query": query,
+                    "metodo_busqueda": metodo_busqueda,
                     "total_encontrados": len(fragmentos),
+                    "fragmentos_prioritarios": sum(1 for f in fragmentos if f.get("es_prioritario")),
+                    "fragmentos_base": sum(1 for f in fragmentos if not f.get("es_prioritario")),
                     "fragmentos": fragmentos,
+                    "nota": "Los fragmentos de Guias/Criterios/Instructivos (es_prioritario=true) contienen interpretacion oficial del SEA y datos especificos."
                 },
-                metadata={"top_k": top_k, "filtros": {"temas": temas, "tipo": tipo_documento}}
+                metadata={
+                    "top_k": top_k,
+                    "metodo": metodo_busqueda,
+                    "filtros": {"temas": temas, "tipo": tipo_documento, "solo_prioritarios": solo_prioritarios}
+                }
             )
 
         except Exception as e:
