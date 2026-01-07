@@ -222,6 +222,38 @@ function verDetalleCapitulo(numero: number) {
         </div>
       </div>
 
+      <!-- Riesgos y recomendaciones -->
+      <div v-if="estimacion" class="mb-4">
+        <details class="collapse collapse-arrow bg-base-200">
+          <summary class="collapse-title text-sm font-medium py-3">
+            Riesgos y Recomendaciones
+          </summary>
+          <div class="collapse-content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <!-- Riesgos -->
+              <div v-if="estimacion.riesgos_principales?.length">
+                <h4 class="font-semibold text-sm mb-2 text-warning">Riesgos Principales</h4>
+                <ul class="list-disc list-inside text-sm opacity-80 space-y-1">
+                  <li v-for="(riesgo, idx) in estimacion.riesgos_principales" :key="idx">
+                    {{ riesgo }}
+                  </li>
+                </ul>
+              </div>
+
+              <!-- Recomendaciones -->
+              <div v-if="estimacion.recomendaciones?.length">
+                <h4 class="font-semibold text-sm mb-2 text-info">Recomendaciones</h4>
+                <ul class="list-disc list-inside text-sm opacity-80 space-y-1">
+                  <li v-for="(rec, idx) in estimacion.recomendaciones" :key="idx">
+                    {{ rec }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- Tabs -->
       <div class="tabs tabs-boxed mb-4">
         <button
@@ -255,7 +287,7 @@ function verDetalleCapitulo(numero: number) {
       </div>
 
       <!-- Contenido de tabs -->
-      <div class="flex-1 overflow-y-auto">
+      <div class="overflow-y-auto border border-base-300 rounded-lg p-4" style="height: 600px;">
         <CapitulosList
           v-if="tabActiva === 'capitulos'"
           :capitulos="capitulos"
@@ -281,43 +313,12 @@ function verDetalleCapitulo(numero: number) {
         />
       </div>
 
-      <!-- Riesgos y recomendaciones (footer colapsable) -->
-      <div v-if="estimacion" class="mt-4">
-        <details class="collapse collapse-arrow bg-base-200">
-          <summary class="collapse-title text-sm font-medium py-3">
-            Riesgos y Recomendaciones
-          </summary>
-          <div class="collapse-content">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <!-- Riesgos -->
-              <div v-if="estimacion.riesgos_principales?.length">
-                <h4 class="font-semibold text-sm mb-2 text-warning">Riesgos Principales</h4>
-                <ul class="list-disc list-inside text-sm opacity-80 space-y-1">
-                  <li v-for="(riesgo, idx) in estimacion.riesgos_principales" :key="idx">
-                    {{ riesgo }}
-                  </li>
-                </ul>
-              </div>
-
-              <!-- Recomendaciones -->
-              <div v-if="estimacion.recomendaciones?.length">
-                <h4 class="font-semibold text-sm mb-2 text-info">Recomendaciones</h4>
-                <ul class="list-disc list-inside text-sm opacity-80 space-y-1">
-                  <li v-for="(rec, idx) in estimacion.recomendaciones" :key="idx">
-                    {{ rec }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </details>
-      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 .estructura-eia {
-  max-height: calc(100vh - 200px);
+  min-height: 500px;
 }
 </style>

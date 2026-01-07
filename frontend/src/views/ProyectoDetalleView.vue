@@ -9,6 +9,7 @@ import { useMap } from '@/composables/useMap'
 import ProyectoProgreso from '@/components/proyectos/ProyectoProgreso.vue'
 import ProyectoAlertas from '@/components/proyectos/ProyectoAlertas.vue'
 import ProyectoFormulario from '@/components/proyectos/ProyectoFormulario.vue'
+import ProgresoIntegral from '@/components/proyectos/ProgresoIntegral.vue'
 import MapContainer from '@/components/map/MapContainer.vue'
 import AnalysisPanel from '@/components/analysis/AnalysisPanel.vue'
 import ChatAsistente from '@/components/asistente/ChatAsistente.vue'
@@ -16,7 +17,7 @@ import FichaAcumulativa from '@/components/asistente/FichaAcumulativa.vue'
 import EstructuraEIA from '@/components/asistente/EstructuraEIA.vue'
 import RecopilacionCapitulo from '@/components/asistente/recopilacion/RecopilacionCapitulo.vue'
 import GeneracionEIA from '@/components/generacion/GeneracionEIA.vue'
-import { ESTADOS_PROYECTO } from '@/types'
+import ChecklistComponentes from '@/components/componentes/ChecklistComponentes.vue'
 import type { DatosProyecto, GeometriaGeoJSON } from '@/types'
 
 const route = useRoute()
@@ -27,10 +28,8 @@ const asistenteStore = useAsistenteStore()
 const { ejecutarAnalisisRapido, ejecutarAnalisisCompleto, cargando: analizando } = useAnalysis()
 const { centrarEnGeometria } = useMap()
 
-const tabActivo = ref<'info' | 'mapa' | 'analisis' | 'documentos' | 'asistente' | 'ficha' | 'estructura' | 'recopilacion' | 'generacion'>('info')
+const tabActivo = ref<'info' | 'mapa' | 'analisis' | 'documentos' | 'asistente' | 'ficha' | 'estructura' | 'recopilacion' | 'generacion' | 'checklist'>('info')
 
-// Computed para determinar si el layout debe ser full-width (sin sidebar)
-const layoutFullWidth = computed(() => tabActivo.value === 'ficha')
 const guardando = ref(false)
 const formularioDatos = ref<DatosProyecto>({ nombre: '' })
 
@@ -44,10 +43,11 @@ const kmlFileInput = ref<HTMLInputElement | null>(null)
 const importandoKml = ref(false)
 const errorKml = ref<string | null>(null)
 
+// Descripción geográfica
+const generandoDescripcion = ref(false)
+const errorDescripcion = ref<string | null>(null)
+
 const proyecto = computed(() => store.proyectoActual)
-const estadoInfo = computed(() =>
-  ESTADOS_PROYECTO.find((e) => e.value === proyecto.value?.estado)
-)
 
 // Cargar proyecto y su último análisis
 onMounted(async () => {
@@ -81,9 +81,9 @@ onMounted(async () => {
         descripcion: store.proyectoActual.descripcion || null,
       }
 
-      // Cargar el último análisis del proyecto desde la BD
+      // Cargar el último análisis solo si el proyecto tiene análisis previos
       const proyectoId = parseInt(id, 10)
-      if (!isNaN(proyectoId)) {
+      if (!isNaN(proyectoId) && store.proyectoActual.total_analisis > 0) {
         await analysisStore.cargarUltimoAnalisis(proyectoId)
       }
 
@@ -246,13 +246,43 @@ async function onKmlSeleccionado(event: Event) {
     input.value = ''
   }
 }
+
+// Generar descripción geográfica
+async function generarDescripcionGeografica() {
+  if (!proyecto.value) return
+
+  generandoDescripcion.value = true
+  errorDescripcion.value = null
+
+  try {
+    const response = await fetch(
+      `/api/v1/proyectos/${proyecto.value.id}/generar-descripcion-geografica?forzar=${!!proyecto.value.descripcion_geografica}`,
+      { method: 'POST' }
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.detail || 'Error generando descripción')
+    }
+
+    const resultado = await response.json()
+
+    // Recargar proyecto para obtener la descripción actualizada
+    await store.cargarProyecto(proyecto.value.id.toString())
+
+    console.log('Descripción geográfica generada:', resultado)
+  } catch (e) {
+    console.error('Error generando descripción geográfica:', e)
+    errorDescripcion.value = e instanceof Error ? e.message : 'Error generando descripción'
+    setTimeout(() => errorDescripcion.value = null, 5000)
+  } finally {
+    generandoDescripcion.value = false
+  }
+}
 </script>
 
 <template>
-  <div
-    class="mx-auto"
-    :class="layoutFullWidth ? 'w-full p-2' : 'p-6 max-w-7xl'"
-  >
+  <div class="mx-auto p-6 max-w-7xl">
     <!-- Loading -->
     <div v-if="store.cargando" class="flex justify-center py-20">
       <span class="loading loading-spinner loading-lg"></span>
@@ -269,114 +299,26 @@ async function onKmlSeleccionado(event: Event) {
     <!-- Contenido -->
     <template v-else>
       <!-- Header -->
-      <div class="flex items-start justify-between mb-6">
-        <div>
-          <div class="flex items-center gap-2 mb-2">
-            <button class="btn btn-ghost btn-sm" @click="router.push('/proyectos')">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-              Proyectos
-            </button>
-          </div>
-          <h1 class="text-2xl font-bold">{{ proyecto.nombre }}</h1>
-          <p class="text-sm opacity-60">
-            {{ proyecto.cliente_razon_social || 'Sin cliente asignado' }}
-          </p>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="badge" :class="estadoInfo?.color">
-            {{ estadoInfo?.label }}
-          </div>
-        </div>
+      <div class="mb-3">
+        <h1 class="text-2xl font-bold">{{ proyecto.nombre }}</h1>
       </div>
 
-      <!-- Grid principal -->
-      <div
-        class="grid gap-6"
-        :class="layoutFullWidth ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-3'"
-      >
-        <!-- Sidebar izquierdo (oculto en modo full-width) -->
-        <div v-if="!layoutFullWidth" class="lg:col-span-1 space-y-4">
-          <!-- Progreso -->
-          <ProyectoProgreso :proyecto="proyecto" @ir-a-mapa="irAMapa" />
+      <!-- Dashboard de progreso del workflow EIA -->
+      <div class="mb-6">
+        <ProgresoIntegral
+          :proyecto-id="Number(proyecto.id)"
+          @ir-a-fase="(fase) => {
+            if (fase === 'identificacion') tabActivo = 'mapa'
+            else if (fase === 'prefactibilidad') tabActivo = 'analisis'
+            else if (fase === 'recopilacion') tabActivo = 'checklist'
+            else if (fase === 'generacion') tabActivo = 'generacion'
+            else tabActivo = 'info'
+          }"
+        />
+      </div>
 
-          <!-- Alertas GIS (si tiene geometria) -->
-          <div v-if="proyecto.tiene_geometria" class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-              <h3 class="font-semibold mb-2">Alertas GIS</h3>
-              <ProyectoAlertas :proyecto="proyecto" />
-            </div>
-          </div>
-
-          <!-- Acciones -->
-          <div class="card bg-base-100 shadow-sm">
-            <div class="card-body space-y-2">
-              <h3 class="font-semibold mb-2">Acciones</h3>
-
-              <button
-                class="btn btn-primary w-full"
-                :disabled="!proyecto.puede_analizar || analizando"
-                @click="analizar('rapido')"
-              >
-                <span v-if="analizando" class="loading loading-spinner loading-sm"></span>
-                <span v-else>Analisis Rapido</span>
-              </button>
-
-              <button
-                class="btn btn-secondary w-full"
-                :disabled="!proyecto.puede_analizar || analizando"
-                @click="analizar('completo')"
-              >
-                <span v-if="analizando" class="loading loading-spinner loading-sm"></span>
-                <span v-else>Analisis Completo (LLM)</span>
-              </button>
-
-              <div v-if="!proyecto.tiene_geometria" class="text-xs text-warning text-center">
-                Dibuja el poligono para habilitar analisis
-              </div>
-
-              <div class="divider my-2"></div>
-
-              <!-- Botón eliminar con dropdown -->
-              <div class="dropdown dropdown-end w-full">
-                <label tabindex="0" class="btn btn-outline btn-error w-full">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Eliminar
-                </label>
-                <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-64 mt-1">
-                  <li>
-                    <button @click="confirmarEliminacion('archivar')" class="text-warning">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                      </svg>
-                      Archivar
-                      <span class="text-xs opacity-60">(recuperable)</span>
-                    </button>
-                  </li>
-                  <li v-if="puedeEliminarPermanente">
-                    <button @click="confirmarEliminacion('eliminar')" class="text-error">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      Eliminar permanente
-                    </button>
-                  </li>
-                  <li v-else class="disabled">
-                    <span class="text-xs opacity-50 cursor-not-allowed">
-                      Eliminar permanente solo disponible para borradores sin analisis
-                    </span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Contenido principal con tabs -->
-        <div :class="layoutFullWidth ? '' : 'lg:col-span-2'">
+      <!-- Contenedor principal -->
+      <div>
           <!-- Tabs -->
           <div class="tabs tabs-boxed mb-4">
             <button
@@ -457,6 +399,16 @@ async function onKmlSeleccionado(event: Event) {
             </button>
             <button
               class="tab"
+              :class="{ 'tab-active': tabActivo === 'checklist' }"
+              @click="tabActivo = 'checklist'"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Checklist
+            </button>
+            <button
+              class="tab"
               :class="{ 'tab-active': tabActivo === 'generacion' }"
               @click="tabActivo = 'generacion'"
             >
@@ -468,13 +420,108 @@ async function onKmlSeleccionado(event: Event) {
           </div>
 
           <!-- Tab: Informacion -->
-          <div v-if="tabActivo === 'info'" class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-              <ProyectoFormulario
-                v-model="formularioDatos"
-                :guardando="guardando"
-                @guardar="guardar"
-              />
+          <div v-if="tabActivo === 'info'" class="space-y-6">
+            <!-- Grid superior con progreso, alertas y acciones -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <!-- Progreso -->
+              <ProyectoProgreso :proyecto="proyecto" @ir-a-mapa="irAMapa" />
+
+              <!-- Alertas GIS (si tiene geometria) -->
+              <div v-if="proyecto.tiene_geometria" class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                  <h3 class="font-semibold mb-2">Alertas GIS</h3>
+                  <ProyectoAlertas :proyecto="proyecto" />
+                </div>
+              </div>
+
+              <!-- Placeholder si no tiene geometria -->
+              <div v-else class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                  <h3 class="font-semibold mb-2">Alertas GIS</h3>
+                  <div class="alert alert-info">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span class="text-sm">Dibuja el polígono para ver alertas GIS</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Acciones -->
+              <div class="card bg-base-100 shadow-sm">
+                <div class="card-body space-y-2">
+                  <h3 class="font-semibold mb-2">Acciones</h3>
+
+                  <button
+                    class="btn btn-primary w-full"
+                    :disabled="!proyecto.puede_analizar || analizando"
+                    @click="analizar('rapido')"
+                  >
+                    <span v-if="analizando" class="loading loading-spinner loading-sm"></span>
+                    <span v-else>Analisis Rapido</span>
+                  </button>
+
+                  <button
+                    class="btn btn-secondary w-full"
+                    :disabled="!proyecto.puede_analizar || analizando"
+                    @click="analizar('completo')"
+                  >
+                    <span v-if="analizando" class="loading loading-spinner loading-sm"></span>
+                    <span v-else>Analisis Completo (LLM)</span>
+                  </button>
+
+                  <div v-if="!proyecto.tiene_geometria" class="text-xs text-warning text-center">
+                    Dibuja el poligono para habilitar analisis
+                  </div>
+
+                  <div class="divider my-2"></div>
+
+                  <!-- Botón eliminar con dropdown -->
+                  <div class="dropdown dropdown-end w-full">
+                    <label tabindex="0" class="btn btn-outline btn-error w-full">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Eliminar
+                    </label>
+                    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-64 mt-1">
+                      <li>
+                        <button @click="confirmarEliminacion('archivar')" class="text-warning">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                          </svg>
+                          Archivar
+                          <span class="text-xs opacity-60">(recuperable)</span>
+                        </button>
+                      </li>
+                      <li v-if="puedeEliminarPermanente">
+                        <button @click="confirmarEliminacion('eliminar')" class="text-error">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Eliminar permanente
+                        </button>
+                      </li>
+                      <li v-else class="disabled">
+                        <span class="text-xs opacity-50 cursor-not-allowed">
+                          Eliminar permanente solo disponible para borradores sin analisis
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Formulario de datos del proyecto -->
+            <div class="card bg-base-100 shadow-sm">
+              <div class="card-body">
+                <ProyectoFormulario
+                  v-model="formularioDatos"
+                  :guardando="guardando"
+                  @guardar="guardar"
+                />
+              </div>
             </div>
           </div>
 
@@ -535,6 +582,65 @@ async function onKmlSeleccionado(event: Event) {
                   </div>
                 </div>
               </div>
+
+              <!-- Descripción geográfica -->
+              <div v-if="proyecto.tiene_geometria" class="mt-6">
+                <div class="flex justify-between items-center mb-3">
+                  <h4 class="font-semibold flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                    </svg>
+                    Descripción Geográfica
+                  </h4>
+                  <button
+                    class="btn btn-ghost btn-sm gap-2"
+                    :disabled="generandoDescripcion"
+                    @click="generarDescripcionGeografica"
+                  >
+                    <span v-if="generandoDescripcion" class="loading loading-spinner loading-xs"></span>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    {{ proyecto.descripcion_geografica ? 'Regenerar' : 'Generar' }}
+                  </button>
+                </div>
+
+                <!-- Mensaje si no hay descripción -->
+                <div v-if="!proyecto.descripcion_geografica && !generandoDescripcion" class="alert alert-info py-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span class="text-sm">
+                    Genera una descripción automática del lugar geográfico donde se emplaza el proyecto
+                  </span>
+                </div>
+
+                <!-- Descripción existente -->
+                <div v-else-if="proyecto.descripcion_geografica" class="bg-base-200 rounded-lg p-4">
+                  <p class="text-sm leading-relaxed whitespace-pre-line">{{ proyecto.descripcion_geografica }}</p>
+
+                  <!-- Metadatos -->
+                  <div class="mt-3 pt-3 border-t border-base-300 flex items-center gap-4 text-xs opacity-60">
+                    <span v-if="proyecto.descripcion_geografica_fecha">
+                      Generada: {{ new Date(proyecto.descripcion_geografica_fecha).toLocaleString('es-CL') }}
+                    </span>
+                    <span v-if="proyecto.descripcion_geografica_fuente === 'auto'" class="badge badge-sm badge-ghost">
+                      Automática (LLM + GIS)
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Loading state -->
+                <div v-if="generandoDescripcion" class="flex flex-col items-center justify-center py-8 gap-3">
+                  <span class="loading loading-spinner loading-lg"></span>
+                  <p class="text-sm opacity-60">Generando descripción geográfica...</p>
+                </div>
+
+                <!-- Error -->
+                <div v-if="errorDescripcion" class="alert alert-error mt-3 py-2">
+                  <span class="text-sm">{{ errorDescripcion }}</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -574,15 +680,20 @@ async function onKmlSeleccionado(event: Event) {
           </div>
 
           <!-- Tab: Estructura EIA -->
-          <div v-else-if="tabActivo === 'estructura'" class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-              <EstructuraEIA :proyecto-id="Number(proyecto.id)" />
-            </div>
+          <div v-else-if="tabActivo === 'estructura'">
+            <EstructuraEIA :proyecto-id="Number(proyecto.id)" />
           </div>
 
           <!-- Tab: Recopilacion EIA -->
           <div v-else-if="tabActivo === 'recopilacion'" class="h-[70vh]">
             <RecopilacionCapitulo :proyecto-id="Number(proyecto.id)" />
+          </div>
+
+          <!-- Tab: Checklist EIA -->
+          <div v-else-if="tabActivo === 'checklist'" class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+              <ChecklistComponentes :proyecto-id="Number(proyecto.id)" />
+            </div>
           </div>
 
           <!-- Tab: Generacion EIA -->
@@ -593,7 +704,6 @@ async function onKmlSeleccionado(event: Event) {
               </div>
             </div>
           </div>
-        </div>
       </div>
 
       <!-- Modal de confirmación de eliminación -->
