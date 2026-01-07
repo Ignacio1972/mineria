@@ -18,6 +18,8 @@ from app.services.gis.analisis import analizar_proyecto_espacial
 from app.services.rag.busqueda import BuscadorLegal
 from app.services.reglas import MotorReglasSSEIA, SistemaAlertas, ClasificacionSEIA
 from app.services.llm import GeneradorInformes, SeccionInforme
+from app.services.componentes_eia import ServicioComponentesEIA
+from app.services.fases import ServicioFases
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,9 @@ class ResultadoAnalisis:
 
     # Informe LLM (opcional)
     informe: Optional[dict] = None
+
+    # Checklist de componentes EIA (opcional)
+    componentes_checklist: list[dict] = field(default_factory=list)
 
     # Métricas
     tiempo_total_ms: int = 0
@@ -103,6 +108,7 @@ class ServicioPrefactibilidad:
         datos_proyecto: dict,
         generar_informe: bool = True,
         secciones: Optional[list[str]] = None,
+        generar_checklist: bool = True,
     ) -> ResultadoAnalisis:
         """
         Ejecuta un análisis completo de prefactibilidad.
@@ -113,6 +119,7 @@ class ServicioPrefactibilidad:
             datos_proyecto: Diccionario con datos del proyecto
             generar_informe: Si True, genera informe con LLM
             secciones: Secciones específicas a generar (opcional)
+            generar_checklist: Si True, genera checklist de componentes EIA
 
         Returns:
             ResultadoAnalisis con todos los datos del análisis
@@ -183,6 +190,49 @@ class ServicioPrefactibilidad:
 
             tiempo_llm = int((time.time() - inicio_llm) * 1000)
 
+        # 6. Generar checklist de componentes EIA
+        componentes_checklist = []
+        if generar_checklist and datos_proyecto.get("id"):
+            logger.info("Generando checklist de componentes EIA...")
+            try:
+                servicio_comp = ServicioComponentesEIA(self.buscador)
+                componentes_db = await servicio_comp.generar_checklist(
+                    db=db,
+                    proyecto_id=datos_proyecto["id"],
+                    analisis_id=None,  # Se actualizará cuando se guarde el análisis
+                    clasificacion=clasificacion.to_dict(),
+                    resultado_gis=resultado_gis,
+                )
+
+                # Convertir a diccionarios para respuesta
+                componentes_checklist = [
+                    {
+                        "id": c.id,
+                        "componente": c.componente,
+                        "capitulo": c.capitulo,
+                        "nombre": c.nombre,
+                        "descripcion": c.descripcion,
+                        "requerido": c.requerido,
+                        "prioridad": c.prioridad,
+                        "estado": c.estado,
+                        "progreso_porcentaje": c.progreso_porcentaje,
+                        "material_rag": c.material_rag,
+                        "sugerencias_busqueda": c.sugerencias_busqueda,
+                        "razon_inclusion": c.razon_inclusion,
+                        "triggers_relacionados": c.triggers_relacionados,
+                    }
+                    for c in componentes_db
+                ]
+
+                logger.info(f"Checklist generado: {len(componentes_checklist)} componentes")
+
+                # Actualizar fase y progreso del proyecto
+                await ServicioFases.actualizar_fase_y_progreso(db, datos_proyecto["id"])
+
+            except Exception as e:
+                logger.error(f"Error generando checklist: {e}")
+                # No fallar el análisis completo si falla el checklist
+
         tiempo_total = int((time.time() - inicio) * 1000)
 
         return ResultadoAnalisis(
@@ -195,6 +245,7 @@ class ServicioPrefactibilidad:
             alertas_dict=alertas_dict,
             normativa_relevante=normativa_relevante,
             informe=informe_dict,
+            componentes_checklist=componentes_checklist,
             tiempo_total_ms=tiempo_total,
             tiempo_gis_ms=tiempo_gis,
             tiempo_rag_ms=tiempo_rag,

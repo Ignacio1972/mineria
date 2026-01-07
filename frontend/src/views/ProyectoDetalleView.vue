@@ -18,6 +18,7 @@ import EstructuraEIA from '@/components/asistente/EstructuraEIA.vue'
 import RecopilacionCapitulo from '@/components/asistente/recopilacion/RecopilacionCapitulo.vue'
 import GeneracionEIA from '@/components/generacion/GeneracionEIA.vue'
 import ChecklistComponentes from '@/components/componentes/ChecklistComponentes.vue'
+import DocumentosRequeridos from '@/components/documentos/DocumentosRequeridos.vue'
 import type { DatosProyecto, GeometriaGeoJSON } from '@/types'
 
 const route = useRoute()
@@ -650,12 +651,12 @@ async function generarDescripcionGeografica() {
           </div>
 
           <!-- Tab: Documentos -->
-          <div v-else-if="tabActivo === 'documentos'" class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-              <p class="text-center opacity-60 py-8">
-                Gestion de documentos en desarrollo
-              </p>
-            </div>
+          <div v-else-if="tabActivo === 'documentos'">
+            <DocumentosRequeridos
+              :proyecto-id="Number(proyecto.id)"
+              @subir-documento="(categoria) => console.log('Subir documento:', categoria)"
+              @ver-documento="(docId) => console.log('Ver documento:', docId)"
+            />
           </div>
 
           <!-- Tab: Asistente -->

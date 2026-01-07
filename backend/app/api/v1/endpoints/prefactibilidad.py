@@ -54,6 +54,7 @@ from app.services.prefactibilidad import (
     extraer_normativa_citada,
     descripcion_seccion,
 )
+from app.services.documentacion import DocumentacionService
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -350,6 +351,54 @@ async def obtener_formatos_exportacion() -> dict[str, Any]:
 
     exportador = ExportadorInformes()
     return {"formatos": exportador.obtener_formatos_disponibles()}
+
+
+# === Helpers para endpoint integrado ===
+
+async def _buscar_normativa_contextual(
+    db: AsyncSession,
+    buscador: BuscadorLegal,
+    clasificacion,
+    alertas: list,
+) -> list[dict]:
+    """
+    Busca normativa relevante basada en el contexto del análisis.
+    """
+    try:
+        normativa = []
+
+        # Buscar por triggers detectados
+        for trigger in clasificacion.triggers[:3]:
+            query = f"Art. 11 letra {trigger.letra.value} {trigger.descripcion}"
+            resultados = await buscador.buscar(db, query, limite=3)
+            for r in resultados:
+                normativa.append({
+                    "contenido": r.contenido,
+                    "documento": r.documento_titulo,
+                    "seccion": r.seccion,
+                    "relevancia": f"Trigger {trigger.letra.value}",
+                })
+
+        # Buscar por componentes ambientales afectados
+        componentes_query = set()
+        for alerta in alertas[:5]:
+            for comp in alerta.componentes_afectados:
+                componentes_query.add(comp.value.replace("_", " "))
+
+        for comp in list(componentes_query)[:3]:
+            resultados = await buscador.buscar(db, f"normativa {comp}", limite=2)
+            for r in resultados:
+                normativa.append({
+                    "contenido": r.contenido,
+                    "documento": r.documento_titulo,
+                    "seccion": r.seccion,
+                    "relevancia": f"Componente: {comp}",
+                })
+
+        return normativa
+    except Exception as e:
+        logger.warning(f"Error buscando normativa contextual: {e}")
+        return []
 
 
 # === Endpoint Integrado con Persistencia y Auditoria ===
@@ -820,6 +869,77 @@ async def obtener_ultimo_analisis(
             "recuperado_de_bd": True,
         }
     )
+
+
+@router.get(
+    "/proyecto/{proyecto_id}/validar-documentacion",
+    summary="Validar documentación antes del análisis",
+    description="""
+    Valida que el proyecto tenga la documentación mínima requerida antes de realizar
+    un análisis de prefactibilidad.
+
+    Retorna:
+    - Estado de completitud de documentación
+    - Lista de documentos obligatorios faltantes
+    - Alertas y recomendaciones
+    - Indicador de si puede proceder con el análisis
+
+    **Recomendación:** Llamar a este endpoint antes de `/analisis-integrado` para
+    advertir al usuario si falta documentación importante.
+    """,
+)
+async def validar_documentacion_para_analisis(
+    proyecto_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Valida la documentación antes de un análisis."""
+    from app.schemas.documento import ValidacionCompletitudResponse
+
+    # Verificar que existe el proyecto
+    result = await db.execute(
+        select(Proyecto).where(Proyecto.id == proyecto_id)
+    )
+    proyecto = result.scalar()
+
+    if not proyecto:
+        raise HTTPException(404, f"Proyecto con id={proyecto_id} no encontrado")
+
+    # Validar documentación
+    doc_service = DocumentacionService(db)
+
+    try:
+        completitud = await doc_service.validar_completitud(proyecto_id)
+
+        return {
+            "proyecto_id": proyecto_id,
+            "documentacion_completa": completitud.es_completo,
+            "puede_analizar": True,  # Siempre puede analizar, pero con warnings
+            "porcentaje_completitud": completitud.porcentaje_completitud,
+            "total_requeridos": completitud.total_requeridos,
+            "total_subidos": completitud.total_subidos,
+            "obligatorios_faltantes": completitud.obligatorios_faltantes,
+            "alertas": completitud.alertas,
+            "recomendacion": (
+                "Documentación completa. Puede proceder con el análisis."
+                if completitud.es_completo
+                else f"Faltan {len(completitud.obligatorios_faltantes)} documento(s) obligatorio(s). "
+                     "Se recomienda completar la documentación antes del análisis, aunque puede proceder."
+            )
+        }
+    except Exception as e:
+        logger.warning(f"Error validando documentación: {e}")
+        # Si hay error, permitir continuar
+        return {
+            "proyecto_id": proyecto_id,
+            "documentacion_completa": False,
+            "puede_analizar": True,
+            "porcentaje_completitud": 0,
+            "total_requeridos": 0,
+            "total_subidos": 0,
+            "obligatorios_faltantes": [],
+            "alertas": ["No se pudo validar documentación"],
+            "recomendacion": "No se pudo verificar documentación. Puede proceder con el análisis."
+        }
 
 
 @router.delete(

@@ -3,7 +3,7 @@ Modelo SQLAlchemy para Proyecto y Analisis.
 """
 from enum import Enum
 from sqlalchemy import Column, Integer, String, Numeric, Text, Boolean, DateTime, ForeignKey, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID, ARRAY
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geometry
 
@@ -56,6 +56,10 @@ class Proyecto(Base):
     estado = Column(String(20), default="borrador", index=True)
     porcentaje_completado = Column(Integer, default=0)
 
+    # Workflow de generacion EIA (5 fases)
+    fase_actual = Column(String(50), default="identificacion", index=True)
+    progreso_global = Column(Integer, default=0)
+
     # Datos basicos
     nombre = Column(String(255), nullable=False)
     tipo_mineria = Column(String(100))
@@ -82,6 +86,11 @@ class Proyecto(Base):
 
     # Descripcion
     descripcion = Column(Text)
+
+    # Descripcion geografica (generada automaticamente)
+    descripcion_geografica = Column(Text, nullable=True)
+    descripcion_geografica_fecha = Column(DateTime, nullable=True)
+    descripcion_geografica_fuente = Column(String(20), default='auto')  # 'auto' | 'manual'
 
     # Campos SEIA adicionales
     descarga_diaria_ton = Column(Numeric(12, 2), nullable=True)
@@ -114,6 +123,12 @@ class Proyecto(Base):
         lazy="dynamic",
         cascade="all, delete-orphan"
     )
+    componentes_checklist = relationship(
+        "ComponenteEIAChecklist",
+        back_populates="proyecto",
+        lazy="dynamic",
+        cascade="all, delete-orphan"
+    )
     documentos = relationship(
         "DocumentoProyecto",
         back_populates="proyecto",
@@ -138,6 +153,60 @@ class Proyecto(Base):
     def puede_analizar(self) -> bool:
         """Verifica si el proyecto puede ser analizado."""
         return self.tiene_geometria and self.estado not in ['archivado']
+
+
+class ComponenteEIAChecklist(Base):
+    """Checklist de componentes EIA para el proyecto.
+
+    Se genera automáticamente durante el análisis completo.
+    Contiene los 17 componentes necesarios para el EIA con material RAG sugerido.
+    """
+
+    __tablename__ = "componentes_eia_checklist"
+    __table_args__ = {"schema": "proyectos"}
+
+    id = Column(Integer, primary_key=True)
+    proyecto_id = Column(
+        Integer,
+        ForeignKey("proyectos.proyectos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    analisis_id = Column(
+        Integer,
+        ForeignKey("proyectos.analisis.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    # Identificación del componente
+    componente = Column(String(100), nullable=False)  # ej: "linea_base_flora"
+    capitulo = Column(Integer, nullable=False, index=True)  # 1-11
+    nombre = Column(String(200), nullable=False)
+    descripcion = Column(Text)
+
+    # Estado del componente
+    requerido = Column(Boolean, default=True)
+    prioridad = Column(String(20), default='media')  # alta | media | baja
+    estado = Column(String(20), default='pendiente', index=True)  # pendiente | en_progreso | completado
+    progreso_porcentaje = Column(Integer, default=0)
+
+    # Material de apoyo del corpus RAG
+    material_rag = Column(JSONB, default=list)  # Array de {documento_id, titulo, contenido, similitud}
+    sugerencias_busqueda = Column(JSONB, default=list)  # Array de strings con queries sugeridas
+
+    # Justificación de inclusión
+    razon_inclusion = Column(Text)  # Por qué este componente es necesario
+    triggers_relacionados = Column(ARRAY(String), default=list)  # Triggers Art. 11 relacionados
+
+    # Auditoría
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    # Relaciones
+    proyecto = relationship("Proyecto", back_populates="componentes_checklist")
+
+    def __repr__(self):
+        return f"<ComponenteEIAChecklist {self.componente} - {self.estado}>"
 
 
 class Analisis(Base):

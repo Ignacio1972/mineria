@@ -41,7 +41,7 @@ const pasos = computed(() => [
     <div class="card-body">
       <div class="flex items-center justify-between mb-4">
         <h3 class="font-semibold">Estado del Proyecto</h3>
-        <div class="badge" :class="proyecto.estado === 'borrador' ? 'badge-ghost' : 'badge-primary'">
+        <div class="badge whitespace-nowrap" :class="proyecto.estado === 'borrador' ? 'badge-ghost' : 'badge-primary'">
           {{ proyecto.porcentaje_completado }}% completo
         </div>
       </div>

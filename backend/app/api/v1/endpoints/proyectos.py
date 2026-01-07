@@ -11,6 +11,7 @@ import logging
 
 from app.db.session import get_db
 from app.db.models import Proyecto, Cliente, DocumentoProyecto, Analisis
+from app.db.models.proyecto import ComponenteEIAChecklist
 from app.schemas.proyecto import (
     ProyectoCreate,
     ProyectoUpdate,
@@ -20,7 +21,10 @@ from app.schemas.proyecto import (
     ProyectoListResponse,
     EstadoProyecto,
     CambioEstadoRequest,
+    ComponenteChecklistResponse,
+    ComponenteChecklistUpdate,
 )
+from app.services.fases import ServicioFases
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +53,9 @@ def proyecto_to_dict(proyecto: Proyecto, cliente: Optional[Cliente] = None) -> d
         "trabajadores_operacion": proyecto.trabajadores_operacion,
         "inversion_musd": float(proyecto.inversion_musd) if proyecto.inversion_musd else None,
         "descripcion": proyecto.descripcion,
+        "descripcion_geografica": proyecto.descripcion_geografica,
+        "descripcion_geografica_fecha": proyecto.descripcion_geografica_fecha,
+        "descripcion_geografica_fuente": proyecto.descripcion_geografica_fuente,
         "descarga_diaria_ton": float(proyecto.descarga_diaria_ton) if proyecto.descarga_diaria_ton else None,
         "emisiones_co2_ton_ano": float(proyecto.emisiones_co2_ton_ano) if proyecto.emisiones_co2_ton_ano else None,
         "requiere_reasentamiento": proyecto.requiere_reasentamiento or False,
@@ -523,3 +530,206 @@ async def historial_analisis_proyecto(
         }
         for a in analisis.scalars().all()
     ]
+
+
+@router.post("/{proyecto_id}/generar-descripcion-geografica")
+async def generar_descripcion_geografica_endpoint(
+    proyecto_id: int,
+    forzar: bool = Query(False, description="Forzar regeneración si ya existe"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Genera la descripción geográfica automática del proyecto.
+
+    Utiliza análisis GIS + LLM para crear una descripción narrativa
+    del lugar geográfico donde se emplaza el proyecto.
+
+    Args:
+        proyecto_id: ID del proyecto
+        forzar: Si True, regenera aunque ya exista descripción
+
+    Returns:
+        Descripción generada con metadatos (tokens, tiempo, etc.)
+    """
+    from app.services.gis.descripcion_geografica import generar_descripcion_proyecto
+
+    try:
+        resultado = await generar_descripcion_proyecto(
+            db=db,
+            proyecto_id=proyecto_id,
+            forzar_regeneracion=forzar
+        )
+
+        return {
+            "success": True,
+            "proyecto_id": proyecto_id,
+            **resultado
+        }
+
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        logger.error(f"Error generando descripción geográfica: {e}", exc_info=True)
+        raise HTTPException(500, f"Error generando descripción: {str(e)}")
+
+
+# ============================================================================
+# ENDPOINTS DE WORKFLOW EIA - SPRINT 1
+# ============================================================================
+
+
+@router.get("/{proyecto_id}/componentes-checklist", response_model=list[ComponenteChecklistResponse])
+async def obtener_checklist_componentes(
+    proyecto_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Obtiene el checklist de componentes EIA del proyecto.
+
+    Retorna los 17 componentes necesarios para el EIA con su estado,
+    material RAG asociado y progreso de completitud.
+    """
+    # Verificar que el proyecto existe
+    result = await db.execute(select(Proyecto).where(Proyecto.id == proyecto_id))
+    if not result.scalar():
+        raise HTTPException(404, "Proyecto no encontrado")
+
+    # Obtener componentes ordenados por capítulo
+    result = await db.execute(
+        select(ComponenteEIAChecklist)
+        .where(ComponenteEIAChecklist.proyecto_id == proyecto_id)
+        .order_by(ComponenteEIAChecklist.capitulo, ComponenteEIAChecklist.id)
+    )
+    componentes = result.scalars().all()
+
+    return [ComponenteChecklistResponse.model_validate(c.__dict__) for c in componentes]
+
+
+@router.get("/{proyecto_id}/progreso")
+async def obtener_progreso_proyecto(
+    proyecto_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Obtiene el progreso integral del proyecto a través del workflow EIA.
+
+    Retorna:
+    - Fase actual (identificacion, prefactibilidad, recopilacion, generacion, refinamiento)
+    - Progreso global (0-100%)
+    - Información detallada de cada fase
+    - Estadísticas de componentes del checklist
+    """
+    # Verificar que el proyecto existe
+    result = await db.execute(select(Proyecto).where(Proyecto.id == proyecto_id))
+    proyecto = result.scalar()
+    if not proyecto:
+        raise HTTPException(404, "Proyecto no encontrado")
+
+    # Calcular fase actual y progreso
+    fase_actual = await ServicioFases.calcular_fase_actual(db, proyecto_id)
+    progreso_global = await ServicioFases.calcular_progreso_global(db, proyecto_id)
+
+    # Estadísticas de componentes
+    stats_componentes = await ServicioFases.obtener_estadisticas_componentes(db, proyecto_id)
+
+    # Definir fases con sus rangos de progreso
+    fases = [
+        {
+            "id": "identificacion",
+            "nombre": "Identificación",
+            "descripcion": "Definición inicial del proyecto",
+            "rango_progreso": [0, 20],
+            "completada": progreso_global >= 20,
+            "activa": fase_actual == "identificacion",
+        },
+        {
+            "id": "prefactibilidad",
+            "nombre": "Prefactibilidad",
+            "descripcion": "Análisis ambiental completo",
+            "rango_progreso": [20, 30],
+            "completada": progreso_global >= 30,
+            "activa": fase_actual == "prefactibilidad",
+        },
+        {
+            "id": "recopilacion",
+            "nombre": "Recopilación",
+            "descripcion": "Recopilación de material para componentes EIA",
+            "rango_progreso": [30, 70],
+            "completada": progreso_global >= 70,
+            "activa": fase_actual == "recopilacion",
+        },
+        {
+            "id": "generacion",
+            "nombre": "Generación",
+            "descripcion": "Generación de capítulos del EIA",
+            "rango_progreso": [70, 90],
+            "completada": progreso_global >= 90,
+            "activa": fase_actual == "generacion",
+        },
+        {
+            "id": "refinamiento",
+            "nombre": "Refinamiento",
+            "descripcion": "Validación y ajustes finales",
+            "rango_progreso": [90, 100],
+            "completada": progreso_global == 100,
+            "activa": fase_actual == "refinamiento",
+        },
+    ]
+
+    return {
+        "proyecto_id": proyecto_id,
+        "fase_actual": fase_actual,
+        "progreso_global": progreso_global,
+        "fases": fases,
+        "componentes_checklist": stats_componentes,
+    }
+
+
+@router.patch("/{proyecto_id}/componentes/{componente_id}", response_model=ComponenteChecklistResponse)
+async def actualizar_componente_checklist(
+    proyecto_id: int,
+    componente_id: int,
+    data: ComponenteChecklistUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Actualiza el estado y progreso de un componente del checklist.
+
+    Permite marcar componentes como en_progreso o completados,
+    y actualizar su porcentaje de completitud.
+    """
+    # Verificar que el componente existe y pertenece al proyecto
+    result = await db.execute(
+        select(ComponenteEIAChecklist)
+        .where(
+            ComponenteEIAChecklist.id == componente_id,
+            ComponenteEIAChecklist.proyecto_id == proyecto_id
+        )
+    )
+    componente = result.scalar()
+
+    if not componente:
+        raise HTTPException(404, "Componente no encontrado")
+
+    # Actualizar campos
+    if data.estado is not None:
+        componente.estado = data.estado
+
+    if data.progreso_porcentaje is not None:
+        componente.progreso_porcentaje = data.progreso_porcentaje
+
+        # Auto-actualizar estado según progreso
+        if data.progreso_porcentaje == 0 and componente.estado != 'pendiente':
+            componente.estado = 'pendiente'
+        elif 0 < data.progreso_porcentaje < 100 and componente.estado == 'pendiente':
+            componente.estado = 'en_progreso'
+        elif data.progreso_porcentaje == 100:
+            componente.estado = 'completado'
+
+    await db.commit()
+    await db.refresh(componente)
+
+    # Actualizar fase y progreso del proyecto
+    await ServicioFases.actualizar_fase_y_progreso(db, proyecto_id)
+
+    return ComponenteChecklistResponse.model_validate(componente.__dict__)

@@ -69,8 +69,17 @@ export interface Proyecto extends DatosProyecto, CamposPreCalculados {
   id: string
   estado: EstadoProyecto
   porcentaje_completado: number
+  // Workflow EIA (5 fases)
+  fase_actual: string
+  progreso_global: number
+  // Estado
   tiene_geometria: boolean
   puede_analizar: boolean
+  // Descripcion geografica
+  descripcion_geografica: string | null
+  descripcion_geografica_fecha: string | null
+  descripcion_geografica_fuente: string | null
+  // Cliente y contadores
   cliente_razon_social: string | null
   total_documentos: number
   total_analisis: number

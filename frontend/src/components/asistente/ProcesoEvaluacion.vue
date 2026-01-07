@@ -3,12 +3,9 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useProcesoEvaluacionStore } from '@/stores/procesoEvaluacion'
 import { storeToRefs } from 'pinia'
 import {
-  ESTADO_EVALUACION_LABELS,
-  ESTADO_PLAZO_COLORS,
   PRIORIDAD_COLORS,
   TIPO_OBSERVACION_LABELS,
   OAECAS_MINERIA,
-  type EstadoEvaluacion,
   type ObservacionICSARA,
   type ICSARA,
 } from '@/types/procesoEvaluacion'

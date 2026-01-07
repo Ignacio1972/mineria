@@ -20,6 +20,65 @@ class EstadoProyecto(str, Enum):
     ARCHIVADO = "archivado"
 
 
+class FaseProyecto(str, Enum):
+    """Fases del workflow de generación EIA."""
+    IDENTIFICACION = "identificacion"
+    PREFACTIBILIDAD = "prefactibilidad"
+    RECOPILACION = "recopilacion"
+    GENERACION = "generacion"
+    REFINAMIENTO = "refinamiento"
+
+
+class MaterialRAG(BaseModel):
+    """Material del corpus RAG asociado a un componente."""
+    documento_id: int
+    titulo: str
+    contenido: str
+    similitud: float = Field(..., ge=0, le=1)
+
+
+class ComponenteChecklistBase(BaseModel):
+    """Base para componente del checklist."""
+    componente: str
+    capitulo: int = Field(..., ge=1, le=11)
+    nombre: str
+    descripcion: Optional[str] = None
+    requerido: bool = True
+    prioridad: str = Field("media", pattern="^(alta|media|baja)$")
+    estado: str = Field("pendiente", pattern="^(pendiente|en_progreso|completado)$")
+    progreso_porcentaje: int = Field(0, ge=0, le=100)
+    razon_inclusion: Optional[str] = None
+    triggers_relacionados: List[str] = Field(default_factory=list)
+
+
+class ComponenteChecklistCreate(ComponenteChecklistBase):
+    """Schema para crear componente del checklist."""
+    proyecto_id: int
+    analisis_id: Optional[int] = None
+    material_rag: List[MaterialRAG] = Field(default_factory=list)
+    sugerencias_busqueda: List[str] = Field(default_factory=list)
+
+
+class ComponenteChecklistResponse(ComponenteChecklistBase):
+    """Schema de respuesta para componente del checklist."""
+    id: int
+    proyecto_id: int
+    analisis_id: Optional[int] = None
+    material_rag: List[MaterialRAG] = Field(default_factory=list)
+    sugerencias_busqueda: List[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ComponenteChecklistUpdate(BaseModel):
+    """Schema para actualizar componente del checklist."""
+    estado: Optional[str] = Field(None, pattern="^(pendiente|en_progreso|completado)$")
+    progreso_porcentaje: Optional[int] = Field(None, ge=0, le=100)
+
+
 class GeometriaGeoJSON(BaseModel):
     """Geometria en formato GeoJSON."""
     type: str = Field(..., pattern="^(Polygon|MultiPolygon)$")
@@ -108,6 +167,10 @@ class ProyectoResponse(ProyectoBase):
     id: int
     estado: str
     porcentaje_completado: int = 0
+    # Workflow EIA
+    fase_actual: str = "identificacion"
+    progreso_global: int = 0
+    # Estado del proyecto
     tiene_geometria: bool = False
     puede_analizar: bool = False
     # Campos pre-calculados
@@ -115,6 +178,10 @@ class ProyectoResponse(ProyectoBase):
     dist_area_protegida_km: Optional[float] = None
     dist_comunidad_indigena_km: Optional[float] = None
     dist_centro_poblado_km: Optional[float] = None
+    # Descripción geográfica
+    descripcion_geografica: Optional[str] = None
+    descripcion_geografica_fecha: Optional[datetime] = None
+    descripcion_geografica_fuente: Optional[str] = None
     # Info cliente
     cliente_razon_social: Optional[str] = None
     # Contadores

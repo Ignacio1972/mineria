@@ -53,11 +53,18 @@ class ExportadorInformes:
 
         Args:
             informe: Diccionario con los datos del informe
-            formato: Formato de exportación
+            formato: Formato de exportación (debe ser FormatoExportacion enum)
 
         Returns:
             Bytes del documento generado
+
+        Raises:
+            ValueError: Si el formato no es válido
         """
+        # Validar que formato sea del tipo correcto
+        if not isinstance(formato, FormatoExportacion):
+            raise ValueError(f"Formato no válido: {formato}. Debe usar FormatoExportacion enum.")
+
         logger.info(f"Exportando informe a formato: {formato.value}")
 
         if formato == FormatoExportacion.PDF:

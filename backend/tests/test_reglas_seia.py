@@ -25,13 +25,13 @@ from app.services.reglas.seia import ViaIngreso, NivelConfianza
 
 @pytest.fixture
 def datos_proyecto_basico():
-    """Datos de un proyecto minero básico."""
+    """Datos de un proyecto minero básico (pequeño, sin impacto paisajístico)."""
     return {
         "nombre": "Proyecto Test",
-        "tipo_mineria": "Tajo abierto",
+        "tipo_mineria": "Subterránea",  # No dispara trigger paisaje
         "mineral_principal": "Cobre",
         "region": "Antofagasta",
-        "superficie_ha": 200,
+        "superficie_ha": 50,  # Menor a 100 ha para evitar trigger paisaje
         "uso_agua_lps": 50,
         "vida_util_anos": 15,
         "trabajadores_construccion": 300,
